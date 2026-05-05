@@ -7,6 +7,7 @@ import shutil
 import subprocess
 import signal
 import time
+import uuid
 from pathlib import Path
 from typing import List, Optional
 
@@ -19,7 +20,11 @@ class AgentWrapper:
         self.proxy_port = proxy_port
         self.auto_analysis = auto_analysis
         self.mitm_process: Optional[subprocess.Popen] = None
-        self.mitm_flow_file = self.output_dir / "flows.mitm"
+
+        # Generate session ID
+        self.session_id = uuid.uuid4().hex[:8]
+        self.session_dir = self.output_dir / self.session_id
+        self.mitm_flow_file = self.session_dir / "flows.mitm"
 
     def _ensure_mitmproxy_installed(self) -> bool:
         """Check if mitmproxy is installed, return True if available"""
@@ -46,12 +51,8 @@ class AgentWrapper:
         if not self._ensure_mitmproxy_installed():
             return False
 
-        # Ensure output directory exists
-        self.output_dir.mkdir(parents=True, exist_ok=True)
-
-        # Remove old flow file if exists
-        if self.mitm_flow_file.exists():
-            self.mitm_flow_file.unlink()
+        # Ensure session directory exists
+        self.session_dir.mkdir(parents=True, exist_ok=True)
 
         mitmdump_path = shutil.which("mitmdump")
         if not mitmdump_path:
@@ -62,8 +63,7 @@ class AgentWrapper:
         cmd = [
             mitmdump_path,
             "-p", str(self.proxy_port),
-            "-w", str(self.mitm_flow_file),
-            "--set", "stream_large_bodies=1",  # Stream large bodies to avoid memory issues
+            "-w", str(self.mitm_flow_file)
         ]
 
         try:
@@ -137,9 +137,16 @@ class AgentWrapper:
         env.update({
             "HTTP_PROXY": proxy_url,
             "HTTPS_PROXY": proxy_url,
-            # For Node.js applications (like Claude Code)
-            "NODE_TLS_REJECT_UNAUTHORIZED": "0",
         })
+
+        # For Node.js applications (like Claude Code)
+        # Use proper certificate instead of disabling verification
+        if mitm_cert.exists():
+            env["NODE_EXTRA_CA_CERTS"] = str(mitm_cert)
+        else:
+            # Fallback: disable verification if cert not found
+            env["NODE_TLS_REJECT_UNAUTHORIZED"] = "0"
+            print("[agentob] Warning: mitmproxy certificate not found, disabling TLS verification")
 
         # For Python applications (like langchain)
         if mitm_cert.exists():
@@ -176,6 +183,7 @@ class AgentWrapper:
 
         print("=" * 60)
         print("[agentob] Starting agent application")
+        print(f"[agentob] Session ID: {self.session_id}")
         print(f"[agentob] Original command: {' '.join(target_cmd)}")
         print(f"[agentob] Resolved command: {' '.join(resolved_cmd)}")
         print("[agentob] Injected environment variables:")
@@ -221,7 +229,7 @@ class AgentWrapper:
             from .analyzer import RequestAnalyzer
 
             # Decode mitm file
-            decoded_dir = self.output_dir / "decoded_flows"
+            decoded_dir = self.session_dir / "decoded_flows"
             decoder = MitmDecoder(str(self.mitm_flow_file), str(decoded_dir))
             decoder.decode()
 
@@ -232,7 +240,8 @@ class AgentWrapper:
             print()
             print("=" * 60)
             print("[agentob] Analysis completed!")
-            print(f"[agentob] Results saved in: {self.output_dir}")
+            print(f"[agentob] Session ID: {self.session_id}")
+            print(f"[agentob] Results saved in: {self.session_dir}")
             print("=" * 60)
 
         except Exception as e:
