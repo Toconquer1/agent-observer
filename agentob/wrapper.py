@@ -233,6 +233,9 @@ class AgentWrapper:
             decoder = MitmDecoder(str(self.mitm_flow_file), str(decoded_dir))
             decoder.decode()
 
+            # Filter relevant requests
+            self._filter_relevant_requests(decoded_dir)
+
             # Analyze requests
             analyzer = RequestAnalyzer(str(decoded_dir))
             analyzer.analyze()
@@ -248,6 +251,47 @@ class AgentWrapper:
             print(f"[agentob] Error during analysis: {e}")
             import traceback
             traceback.print_exc()
+
+    def _filter_relevant_requests(self, decoded_dir: Path):
+        """Filter decoded requests to only keep LLM API related traffic"""
+        import json
+
+        total_count = 0
+        kept_count = 0
+
+        # Iterate through request files only
+        for req_file in decoded_dir.glob("*_request_*.json"):
+            total_count += 1
+            try:
+                with open(req_file, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+
+                url = data.get('url', '')
+
+                # Check if it's an LLM API request (Anthropic-compatible format)
+                # Matches: /v1/messages, /v1/chat/completions, etc.
+                is_llm = '/v1/messages' in url or '/v1/chat/completions' in url
+
+                # Keep the file if it's an LLM request
+                if is_llm:
+                    kept_count += 1
+                else:
+                    # Extract index from filename (e.g., "1_request_20260402_155849.json" -> "1")
+                    req_basename = req_file.stem  # e.g., "1_request_20260402_155849"
+                    index = req_basename.split('_')[0]
+
+                    # Find and delete corresponding response file
+                    for res_file in decoded_dir.glob(f"{index}_response_*.json"):
+                        res_file.unlink()
+
+                    # Delete the request file
+                    req_file.unlink()
+
+            except Exception as e:
+                print(f"[agentob] Warning: Failed to filter {req_file.name}: {e}")
+
+        removed_count = total_count - kept_count
+        print(f"[agentob] Kept {kept_count}/{total_count} LLM request pairs, removed {removed_count}")
 
     def run(self, target_command: List[str]) -> int:
         """Main execution flow"""
