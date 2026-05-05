@@ -1,5 +1,5 @@
 """
-Analyzer module for simplifying and extracting information from decoded requests
+Simplify module for simplifying and extracting information from decoded requests
 """
 import os
 import json
@@ -9,8 +9,8 @@ from typing import Dict, Any, List, Optional
 import copy
 
 
-class RequestAnalyzer:
-    """Analyzer for simplifying decoded request/response pairs"""
+class RequestSimplifier:
+    """Simplifier for simplifying decoded request/response pairs"""
 
     def __init__(self, decoded_dir: str):
         self.decoded_dir = Path(decoded_dir)

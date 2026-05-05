@@ -117,8 +117,6 @@ class MitmDecoder:
     def _is_llm_request(self, url: str) -> bool:
         """Check if the request is an LLM API call"""
         llm_patterns = [
-            "api.anthropic.com",
-            "api.openai.com",
             "/v1/messages",
             "/v1/chat/completions",
         ]

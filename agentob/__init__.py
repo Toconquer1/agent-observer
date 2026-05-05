@@ -7,6 +7,7 @@ __author__ = "Agent Observer Team"
 
 from .wrapper import AgentWrapper
 from .decoder import MitmDecoder
-from .analyzer import RequestAnalyzer
+from .simplify import RequestSimplifier
+from .parser import CallTraceParser
 
-__all__ = ["AgentWrapper", "MitmDecoder", "RequestAnalyzer"]
+__all__ = ["AgentWrapper", "MitmDecoder", "RequestSimplifier", "CallTraceParser"]

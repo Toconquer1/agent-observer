@@ -226,7 +226,8 @@ class AgentWrapper:
 
         try:
             from .decoder import MitmDecoder
-            from .analyzer import RequestAnalyzer
+            from .simplify import RequestSimplifier
+            from .parser import CallTraceParser
 
             # Decode mitm file
             decoded_dir = self.session_dir / "decoded_flows"
@@ -236,9 +237,13 @@ class AgentWrapper:
             # Filter relevant requests
             self._filter_relevant_requests(decoded_dir)
 
-            # Analyze requests
-            analyzer = RequestAnalyzer(str(decoded_dir))
-            analyzer.analyze()
+            # Simplify requests
+            simplifier = RequestSimplifier(str(decoded_dir))
+            simplifier.analyze()
+
+            # Parse call traces
+            parser = CallTraceParser(str(decoded_dir))
+            parser.parse()
 
             print()
             print("=" * 60)

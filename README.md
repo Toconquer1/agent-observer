@@ -70,11 +70,13 @@ agentob --no-analysis -- claude
 ## 工作原理
 
 1. **启动代理**：在后台启动 mitmproxy，监听指定端口（默认 8080）
-2. **注入环境变量**：设置 `HTTP_PROXY`、`HTTPS_PROXY` 等环境变量
-3. **执行目标命令**：在代理环境中启动目标 Agent 应用
-4. **捕获流量**：mitmproxy 记录所有 HTTP/HTTPS 请求到 `.mitm` 文件
-5. **解析流量**：将 `.mitm` 文件解析为 JSON 格式的请求响应对
-6. **分析提取**：提取系统提示词、工具列表、执行轨迹等信息
+2. **生成会话 ID**：为每次执行生成唯一的 8 字符会话 ID
+3. **注入环境变量**：设置 `HTTP_PROXY`、`HTTPS_PROXY`、`NODE_EXTRA_CA_CERTS` 等环境变量
+4. **执行目标命令**：在代理环境中启动目标 Agent 应用
+5. **捕获流量**：mitmproxy 记录所有 HTTP/HTTPS 请求到 `.mitm` 文件
+6. **解析流量**：将 `.mitm` 文件解析为 JSON 格式的请求响应对
+7. **过滤请求**：只保留 LLM API 请求（包含 `/v1/messages` 或 `/v1/chat/completions`）
+8. **分析提取**：提取系统提示词、工具列表、执行轨迹等信息
 
 ## 输出结构
 
@@ -82,21 +84,24 @@ agentob --no-analysis -- claude
 
 ```
 .agentob/
-├── flows.mitm                          # 原始流量文件
-├── decoded_flows/                      # 解码后的请求响应
-│   ├── 1_request_20260505_143022.json
-│   ├── 1_response_20260505_143023.json
-│   ├── 2_request_20260505_143025.json
-│   ├── 2_response_20260505_143026.json
-│   └── analyzed/                       # 分析结果
-│       ├── prompts.txt                 # 提取的系统提示词
-│       ├── tools.json                  # 提取的工具定义
-│       └── execution_trace.json        # 执行轨迹
+└── {session_id}/                       # 会话目录（如 a073ac04）
+    ├── flows.mitm                      # 原始流量文件
+    └── decoded_flows/                  # 解码后的请求响应
+        ├── 1_request_20260505_143022.json
+        ├── 1_response_20260505_143023.json
+        ├── 2_request_20260505_143025.json
+        ├── 2_response_20260505_143026.json
+        └── analyzed/                   # 分析结果
+            ├── prompts.txt             # 提取的系统提示词
+            ├── tools.json              # 提取的工具定义
+            └── execution_trace.json    # 执行轨迹
 ```
 
 ### 文件说明
 
 #### 1. 请求文件 (`*_request_*.json`)
+
+包含原始请求信息，经过简化处理：
 
 ```json
 {
@@ -106,18 +111,33 @@ agentob --no-analysis -- claude
     "headers": {...},
     "request_body": {
         "model": "claude-opus-4",
-        "messages": [...],
-        "system": "[A]",  // 简化后的占位符
+        "messages": [
+            {
+                "role": "user",
+                "content": "Hello"
+            },
+            {
+                "role": "history_placeholder",
+                "content": "[History origin: Request 1, Msg 2]",
+                "_original_role": "assistant"
+            }
+        ],
+        "system": "[A]",  // 简化后的占位符，原文在 prompts.txt
         "tools": [
-            {"name": "Read", "extracted": true}
+            {"name": "Read", "extracted": true}  // 完整定义在 tools.json
         ]
     }
 }
 ```
 
+**简化逻辑：**
+- **消息去重**：重复的历史消息替换为 `history_placeholder`，标注首次出现位置
+- **系统提示词**：长文本（>50字符）替换为 `[A]`, `[B]` 等占位符
+- **工具定义**：提取完整定义，原位置保留 `{name, extracted: true}`
+
 #### 2. 响应文件 (`*_response_*.json`)
 
-对于 SSE 流式响应：
+对于 SSE 流式响应，自动重组为完整结构：
 
 ```json
 {
@@ -126,8 +146,8 @@ agentob --no-analysis -- claude
     "headers": {...},
     "response_body": {
         "is_sse_stream": true,
-        "integrated_thinking": "...",
-        "integrated_text": "...",
+        "integrated_thinking": "完整的思考过程文本",
+        "integrated_text": "完整的回复文本",
         "tool_calls": [
             {
                 "id": "toolu_xxx",
@@ -140,6 +160,12 @@ agentob --no-analysis -- claude
     }
 }
 ```
+
+**解析逻辑：**
+- **SSE 流重组**：从 `content_block_start`, `content_block_delta`, `message_delta` 事件中提取并合并
+- **thinking 提取**：从 `thinking_delta` 事件累积完整思考过程
+- **text 提取**：从 `text_delta` 事件累积完整回复文本
+- **tool_calls 重组**：从 `input_json_delta` 事件累积并解析完整的工具调用参数
 
 #### 3. 系统提示词 (`prompts.txt`)
 
@@ -187,13 +213,12 @@ Another system prompt...
 
 ### LLM API
 
-- Anthropic Claude API (`api.anthropic.com`)
-- OpenAI API (`api.openai.com`)
-- 兼容 OpenAI 格式的其他 API
+通过 URL 路径识别 LLM 请求：
+- `/v1/messages` - Anthropic Claude API 格式
+- `/v1/chat/completions` - OpenAI API 格式
+- 支持任何兼容上述格式的第三方 API（如自定义代理地址）
 
-### MCP (Model Context Protocol)
-
-通过 URL 路径识别 MCP 请求（包含 `/mcp/` 或 `/mcp-`）
+**注意**：当前版本只分析 LLM 请求，MCP 请求会被过滤掉。
 
 ## 环境变量
 
