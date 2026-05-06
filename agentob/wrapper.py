@@ -245,6 +245,37 @@ class AgentWrapper:
             parser = CallTraceParser(str(decoded_dir))
             parser.parse()
 
+            # LLM-based analysis (if API key is available)
+            analyzed_dir = decoded_dir / "analyzed"
+            if os.getenv("ANTHROPIC_API_KEY"):
+                try:
+                    print()
+                    print("[agentob] Starting LLM-based analysis...")
+                    from .analyzer import AgentAnalyzer
+                    analyzer = AgentAnalyzer(str(analyzed_dir))
+                    analyzer.analyze()
+                    print("[agentob] LLM analysis completed!")
+                except Exception as e:
+                    print(f"[agentob] LLM analysis failed: {e}")
+                    print("[agentob] Continuing without LLM analysis...")
+            else:
+                print()
+                print("[agentob] Skipping LLM analysis (ANTHROPIC_API_KEY not set)")
+                print("[agentob] To enable LLM analysis, set ANTHROPIC_API_KEY in .env file")
+
+            # Generate visualization
+            try:
+                print()
+                print("[agentob] Generating visualization...")
+                from .visualizer import AgentVisualizer
+                visualizer = AgentVisualizer(str(analyzed_dir))
+                html_path = visualizer.generate()
+                print(f"[agentob] Visualization saved: {html_path}")
+            except Exception as e:
+                print(f"[agentob] Visualization generation failed: {e}")
+                import traceback
+                traceback.print_exc()
+
             print()
             print("=" * 60)
             print("[agentob] Analysis completed!")
