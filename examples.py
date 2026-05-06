@@ -39,29 +39,44 @@ def example_decoder():
         print(f"Error during decoding: {e}")
 
 
-# 示例 3: 分析已解码的请求
-def example_analyzer():
-    """分析已解码的请求文件"""
-    from agentob import RequestAnalyzer
+# 示例 3: 简化和解析已解码的请求
+def example_simplifier_and_parser():
+    """简化和解析已解码的请求文件"""
+    from agentob import RequestSimplifier, CallTraceParser
 
-    analyzer = RequestAnalyzer(
+    # 简化请求
+    simplifier = RequestSimplifier(
         decoded_dir="./decoded_output"
     )
 
     try:
-        analyzer.analyze()
-        print("Analysis completed successfully!")
+        simplifier.simplify()
+        print("Simplification completed successfully!")
+    except FileNotFoundError:
+        print("Error: decoded directory not found")
+    except Exception as e:
+        print(f"Error during simplification: {e}")
+        return
+
+    # 解析调用轨迹
+    parser = CallTraceParser(
+        decoded_dir="./decoded_output"
+    )
+
+    try:
+        parser.parse()
+        print("Call trace parsing completed successfully!")
         print("Check the 'analyzed' subdirectory for results")
     except FileNotFoundError:
         print("Error: decoded directory not found")
     except Exception as e:
-        print(f"Error during analysis: {e}")
+        print(f"Error during parsing: {e}")
 
 
 # 示例 4: 完整流程
 def example_full_pipeline():
-    """完整的捕获、解码、分析流程"""
-    from agentob import AgentWrapper, MitmDecoder, RequestAnalyzer
+    """完整的捕获、解码、简化、解析流程"""
+    from agentob import AgentWrapper, MitmDecoder, RequestSimplifier, CallTraceParser
     from pathlib import Path
 
     output_dir = Path(".agentob")
@@ -92,10 +107,15 @@ def example_full_pipeline():
         print("Warning: No mitm file found")
         return
 
-    # 步骤 3: 分析请求
-    print("\nStep 3: Analyzing requests...")
-    analyzer = RequestAnalyzer(str(decoded_dir))
-    analyzer.analyze()
+    # 步骤 3: 简化请求
+    print("\nStep 3: Simplifying requests...")
+    simplifier = RequestSimplifier(str(decoded_dir))
+    simplifier.simplify()
+
+    # 步骤 4: 解析调用轨迹
+    print("\nStep 4: Parsing call traces...")
+    parser = CallTraceParser(str(decoded_dir))
+    parser.parse()
 
     print("\nPipeline completed!")
     print(f"Results saved in: {output_dir}")
@@ -178,7 +198,7 @@ if __name__ == "__main__":
 
     # example_wrapper()
     # example_decoder()
-    # example_analyzer()
+    # example_simplifier_and_parser()
     # example_full_pipeline()
     # example_custom_analysis()
     # example_extract_thinking()

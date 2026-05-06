@@ -30,20 +30,23 @@
 - ✅ 输出 JSON 格式的请求响应对
 - ✅ 错误处理和容错
 
-#### agentob/analyzer.py
+#### agentob/simplify.py
 - ✅ 系统提示词提取和占位符替换（[A], [B], [C], ...）
 - ✅ 工具定义提取到 tools.json
 - ✅ 历史消息去重（基于内容哈希，清理 cache_control 等瞬态字段）
 - ✅ 工具结果消息识别
-- ✅ 执行轨迹生成（execution_trace.json）
 - ✅ 输出文件：
   - prompts.txt（系统提示词）
   - tools.json（工具定义）
-  - execution_trace.json（执行轨迹）
+
+#### agentob/parser.py
+- ✅ 调用轨迹生成（call_trace.json）
+- ✅ 提取用户消息、工具结果、助手思考、助手文本、工具调用
+- ✅ 比较响应内容与下一个请求的匹配情况
 
 #### agentob/__init__.py
 - ✅ 包初始化
-- ✅ 导出主要类：AgentWrapper, MitmDecoder, RequestAnalyzer
+- ✅ 导出主要类：AgentWrapper, MitmDecoder, RequestSimplifier, CallTraceParser
 
 #### agentob/__main__.py
 - ✅ 支持 `python -m agentob` 调用方式
@@ -186,11 +189,18 @@ decoder = MitmDecoder('real_flows.mitm', './output')
 decoder.decode()
 ```
 
-### 5. 测试分析器
+### 5. 测试简化器和解析器
 ```python
-from agentob.analyzer import RequestAnalyzer
-analyzer = RequestAnalyzer('./output')
-analyzer.analyze()
+from agentob.simplify import RequestSimplifier
+from agentob.parser import CallTraceParser
+
+# 简化请求
+simplifier = RequestSimplifier('./output')
+simplifier.simplify()
+
+# 解析调用轨迹
+parser = CallTraceParser('./output')
+parser.parse()
 ```
 
 ## ⚠️ 已知问题
@@ -222,13 +232,13 @@ analyzer.analyze()
    ls -la .agentob/decoded_flows/analyzed/
    cat .agentob/decoded_flows/analyzed/prompts.txt
    cat .agentob/decoded_flows/analyzed/tools.json
-   cat .agentob/decoded_flows/analyzed/execution_trace.json
+   cat .agentob/decoded_flows/analyzed/call_trace.json
    ```
 
 4. **编程方式使用**
    ```python
-   from agentob import AgentWrapper, MitmDecoder, RequestAnalyzer
-   
+   from agentob import AgentWrapper, MitmDecoder, RequestSimplifier, CallTraceParser
+
    # 参考 examples.py 中的示例
    ```
 

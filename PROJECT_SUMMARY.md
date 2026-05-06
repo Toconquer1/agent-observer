@@ -104,26 +104,40 @@ SSL_CERT_FILE=~/.mitmproxy/mitmproxy-ca-cert.pem
 }
 ```
 
-### 4. analyzer.py - 请求分析器
+### 4. simplify.py - 请求简化器
 
 **功能**：
 - 简化系统提示词（提取为占位符）
 - 提取工具定义
 - 历史消息去重
-- 生成执行轨迹
 
 **关键方法**：
 - `_get_placeholder()`: 生成占位符（A, B, C, ..., Z, AA, AB, ...）
 - `_sanitize_message()`: 清理消息中的瞬态字段（cache_control, signature）
 - `_is_tool_result_message()`: 识别工具结果消息
 - `_simplify_request()`: 简化单个请求文件
-- `_build_trace()`: 构建执行轨迹
-- `analyze()`: 主分析流程
+- `simplify()`: 主简化流程
 
 **输出文件**：
 - `prompts.txt`: 提取的系统提示词
 - `tools.json`: 提取的工具定义
-- `execution_trace.json`: 完整执行轨迹
+
+### 5. parser.py - 调用轨迹解析器
+
+**功能**：
+- 从简化后的请求响应对生成统一的调用轨迹
+- 提取用户消息、工具结果、助手思考、助手文本、工具调用
+- 比较响应内容与下一个请求的匹配情况
+
+**关键方法**：
+- `_extract_user_messages()`: 提取真实用户消息（排除工具结果）
+- `_extract_tool_results()`: 提取工具结果消息
+- `_compare_response_with_next_request()`: 比较响应与下一个请求
+- `_build_call_trace_item()`: 构建单个调用轨迹项
+- `parse()`: 主解析流程
+
+**输出文件**：
+- `call_trace.json`: 完整调用轨迹
 
 ## 工作流程
 
@@ -146,7 +160,9 @@ mitmproxy 捕获所有 API 请求 → flows.mitm
     ↓
 MitmDecoder 解码 flows.mitm → decoded_flows/*.json
     ↓
-RequestAnalyzer 分析请求 → analyzed/prompts.txt, tools.json, execution_trace.json
+RequestSimplifier 简化请求 → analyzed/prompts.txt, tools.json
+    ↓
+CallTraceParser 解析轨迹 → analyzed/call_trace.json
     ↓
 完成
 ```
@@ -250,12 +266,19 @@ decoder = MitmDecoder('real_flows.mitm', './output')
 decoder.decode()
 ```
 
-### 5. 分析器测试
+### 5. 简化器和解析器测试
 
 ```python
-from agentob.analyzer import RequestAnalyzer
-analyzer = RequestAnalyzer('./output')
-analyzer.analyze()
+from agentob.simplify import RequestSimplifier
+from agentob.parser import CallTraceParser
+
+# 简化请求
+simplifier = RequestSimplifier('./output')
+simplifier.simplify()
+
+# 解析调用轨迹
+parser = CallTraceParser('./output')
+parser.parse()
 ```
 
 ## 后续改进方向

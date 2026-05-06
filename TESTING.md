@@ -76,13 +76,19 @@ decoder = MitmDecoder('path/to/flows.mitm', './output')
 decoder.decode()
 ```
 
-## 测试分析器
+## 测试简化器和解析器
 
 ```python
-from agentob.analyzer import RequestAnalyzer
+from agentob.simplify import RequestSimplifier
+from agentob.parser import CallTraceParser
 
-analyzer = RequestAnalyzer('./output')
-analyzer.analyze()
+# 简化请求
+simplifier = RequestSimplifier('./output')
+simplifier.simplify()
+
+# 解析调用轨迹
+parser = CallTraceParser('./output')
+parser.parse()
 ```
 
 ## 完整流程测试
@@ -112,11 +118,13 @@ ls -la .agentob/
   - SSE 流式响应解析
   - LLM/MCP 请求识别
   - JSON 输出
-- ✅ 分析器（analyzer.py）
+- ✅ 简化器（simplify.py）
   - 系统提示词提取
   - 工具列表提取
   - 历史消息去重
-  - 执行轨迹生成
+- ✅ 解析器（parser.py）
+  - 调用轨迹生成
+  - 信息列表结构化
 - ✅ 使用文档（README.md）
 
 ### 待测试

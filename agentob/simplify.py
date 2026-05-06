@@ -177,50 +177,7 @@ class RequestSimplifier:
 
         return modified
 
-    def _build_trace(self) -> List[Dict[str, Any]]:
-        """Build execution trace from request/response pairs"""
-        trace = []
-
-        search_pattern = str(self.decoded_dir / "*_request_*.json")
-        request_files = glob.glob(search_pattern)
-
-        if not request_files:
-            return trace
-
-        # Sort by index
-        try:
-            request_files.sort(key=lambda x: int(os.path.basename(x).split('_')[0]))
-        except ValueError:
-            request_files.sort()
-
-        for req_file in request_files:
-            req_path = Path(req_file)
-            index = req_path.name.split('_')[0]
-
-            # Find corresponding response
-            res_pattern = str(self.decoded_dir / f"{index}_response_*.json")
-            res_files = glob.glob(res_pattern)
-
-            with open(req_path, 'r', encoding='utf-8') as f:
-                req_data = json.load(f)
-
-            res_data = None
-            if res_files:
-                with open(res_files[0], 'r', encoding='utf-8') as f:
-                    res_data = json.load(f)
-
-            trace_item = {
-                "index": int(index),
-                "type": req_data.get("type", "unknown"),
-                "request": req_data,
-                "response": res_data
-            }
-
-            trace.append(trace_item)
-
-        return trace
-
-    def analyze(self):
+    def simplify(self):
         """Main analysis function"""
         if not self.decoded_dir.exists():
             raise FileNotFoundError(f"Decoded directory not found: {self.decoded_dir}")
@@ -273,12 +230,4 @@ class RequestSimplifier:
                 json.dump(self.all_extracted_tools, f, ensure_ascii=False, indent=4)
             print(f"[analyzer] Extracted {len(self.all_extracted_tools)} tools to tools.json")
 
-        # Build execution trace
-        trace = self._build_trace()
-        if trace:
-            trace_path = self.output_dir / "execution_trace.json"
-            with open(trace_path, 'w', encoding='utf-8') as f:
-                json.dump(trace, f, ensure_ascii=False, indent=4)
-            print(f"[analyzer] Built execution trace with {len(trace)} steps")
-
-        print("[analyzer] Analysis completed!")
+        print("[analyzer] Simplification completed!")

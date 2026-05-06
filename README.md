@@ -94,7 +94,7 @@ agentob --no-analysis -- claude
         └── analyzed/                   # 分析结果
             ├── prompts.txt             # 提取的系统提示词
             ├── tools.json              # 提取的工具定义
-            └── execution_trace.json    # 执行轨迹
+            └── call_trace.json         # 调用轨迹
 ```
 
 ### 文件说明
@@ -190,21 +190,31 @@ Another system prompt...
 }
 ```
 
-#### 5. 执行轨迹 (`execution_trace.json`)
+#### 5. 调用轨迹 (`call_trace.json`)
 
 ```json
 [
     {
         "index": 1,
-        "type": "llm",
-        "request": {...},
-        "response": {...}
-    },
-    {
-        "index": 2,
-        "type": "llm",
-        "request": {...},
-        "response": {...}
+        "model": "claude-opus-4",
+        "information_list": [
+            {
+                "type": "user_message",
+                "content": [...]
+            },
+            {
+                "type": "assistant_thinking",
+                "content": "...",
+                "matched_in_next_request": true
+            },
+            {
+                "type": "tool_calls",
+                "calls": [...],
+                "matched_in_next_request": true
+            }
+        ],
+        "usage": {...},
+        "stop_reason": "tool_use"
     }
 ]
 ```

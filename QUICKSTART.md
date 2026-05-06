@@ -37,7 +37,7 @@ ls -la .agentob/
     └── analyzed/                 # 分析结果
         ├── prompts.txt           # 系统提示词
         ├── tools.json            # 工具定义
-        └── execution_trace.json  # 执行轨迹
+        └── call_trace.json       # 调用轨迹
 ```
 
 ### 3. 自定义选项
@@ -78,15 +78,20 @@ agentob -- uv run main.py
 
 ```python
 from agentob.decoder import MitmDecoder
-from agentob.analyzer import RequestAnalyzer
+from agentob.simplify import RequestSimplifier
+from agentob.parser import CallTraceParser
 
 # 解码
 decoder = MitmDecoder('flows.mitm', './output')
 decoder.decode()
 
-# 分析
-analyzer = RequestAnalyzer('./output')
-analyzer.analyze()
+# 简化
+simplifier = RequestSimplifier('./output')
+simplifier.simplify()
+
+# 解析调用轨迹
+parser = CallTraceParser('./output')
+parser.parse()
 ```
 
 ## 常见问题

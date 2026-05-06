@@ -239,7 +239,7 @@ class AgentWrapper:
 
             # Simplify requests
             simplifier = RequestSimplifier(str(decoded_dir))
-            simplifier.analyze()
+            simplifier.simplify()
 
             # Parse call traces
             parser = CallTraceParser(str(decoded_dir))
