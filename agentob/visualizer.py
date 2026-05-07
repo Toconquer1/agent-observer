@@ -96,17 +96,17 @@ class AgentVisualizer:
         }}
 
         :root {{
-            --color-surface: #0a0a0b;
-            --color-surface-raised: #1a1a1d;
-            --color-surface-overlay: #27272a;
-            --color-border: rgba(255, 255, 255, 0.08);
-            --color-text: #fafafa;
-            --color-text-secondary: #a1a1aa;
-            --color-text-muted: #71717a;
-            --color-accent: #3b82f6;
-            --color-user: #8b5cf6;
-            --color-assistant: #10b981;
-            --color-tool: #f59e0b;
+            --color-surface: #f8f9fa;
+            --color-surface-raised: #ffffff;
+            --color-surface-overlay: #e9ecef;
+            --color-border: rgba(0, 0, 0, 0.08);
+            --color-text: #1a1a2e;
+            --color-text-secondary: #495057;
+            --color-text-muted: #868e96;
+            --color-accent: #2563eb;
+            --color-user: #7c3aed;
+            --color-assistant: #059669;
+            --color-tool: #d97706;
             --sidebar-width: 320px;
         }}
 
@@ -387,6 +387,17 @@ class AgentVisualizer:
             border-top: 1px solid var(--color-border);
         }}
 
+        /* Thinking bubble */
+        .thinking-bubble {{
+            border-style: dashed;
+            opacity: 0.85;
+        }}
+
+        .thinking-bubble .message-text {{
+            font-style: italic;
+            color: var(--color-text-secondary);
+        }}
+
         /* Tool calls */
         .tool-call {{
             background: var(--color-surface-overlay);
@@ -469,30 +480,6 @@ class AgentVisualizer:
             line-height: 1.6;
         }}
 
-        /* Call separator */
-        .call-separator {{
-            display: flex;
-            align-items: center;
-            gap: 1rem;
-            margin: 2rem 0;
-        }}
-
-        .call-separator-line {{
-            flex: 1;
-            height: 1px;
-            background: var(--color-border);
-        }}
-
-        .call-separator-label {{
-            padding: 0.5rem 1rem;
-            background: var(--color-surface-raised);
-            border: 1px solid var(--color-border);
-            border-radius: 1rem;
-            font-size: 0.8125rem;
-            font-weight: 600;
-            color: var(--color-text-secondary);
-        }}
-
         /* Scrollbar */
         ::-webkit-scrollbar {{
             width: 8px;
@@ -509,7 +496,7 @@ class AgentVisualizer:
         }}
 
         ::-webkit-scrollbar-thumb:hover {{
-            background: #3a3a3f;
+            background: #adb5bd;
         }}
     </style>
 </head>
@@ -661,18 +648,8 @@ class AgentVisualizer:
         call_analyses = self.analysis.get("call_analyses", []) if self.analysis else []
         item_index = 0
 
-        for call_idx, call in enumerate(self.call_trace):
-            index = call.get("index", "?")
-            model = call.get("model", "unknown")
+        for call in self.call_trace:
             info_list = call.get("information_list", [])
-
-            # Add call separator
-            if call_idx > 0:
-                messages_html += f'''<div class="call-separator">
-                    <div class="call-separator-line"></div>
-                    <div class="call-separator-label">调用 #{index} · {self._escape_html(model)}</div>
-                    <div class="call-separator-line"></div>
-                </div>'''
 
             for item in info_list:
                 item_type = item.get("type", "unknown")
@@ -698,6 +675,10 @@ class AgentVisualizer:
             msg_class = "tool"
             avatar = "🔧"
             type_label = "工具调用"
+        elif item_type == "assistant_thinking":
+            msg_class = "assistant"
+            avatar = "💭"
+            type_label = "思考"
         elif item_type == "tool_result":
             msg_class = "tool"
             avatar = "✅"
@@ -759,6 +740,16 @@ class AgentVisualizer:
                 html += f'<div class="tool-call-args">{self._escape_html(self._format_json(args))}</div>'
                 html += '</div>'
 
+            html += '</div>'
+
+        elif item_type == "assistant_thinking":
+            content = item.get("content", "")
+            html += '<div class="message-bubble thinking-bubble">'
+            html += f'<div class="message-header"><span class="message-type">{type_label}</span>'
+            if item.get("matched_in_next_request"):
+                html += '<span class="message-badge">已匹配</span>'
+            html += '</div>'
+            html += f'<div class="message-text">{self._escape_html(content)}</div>'
             html += '</div>'
 
         elif item_type == "tool_result":
