@@ -32,11 +32,12 @@ class AgentAnalyzer:
         self.output_file = self.analyzed_dir / "analyze.json"
 
         # Load API configuration
-        self.api_key = api_key or os.getenv("ANTHROPIC_API_KEY")
-        self.api_url = api_url or os.getenv("ANTHROPIC_API_URL", "https://api.anthropic.com")
+        self.api_key = api_key or os.getenv("AGOB_API_KEY")
+        self.api_url = api_url or os.getenv("AGOB_API_URL", "https://api.anthropic.com")
+        self.model = os.getenv("AGOB_MODEL", "claude-sonnet-4-6")
 
         if not self.api_key:
-            raise ValueError("API key not provided. Set ANTHROPIC_API_KEY environment variable or pass api_key parameter.")
+            raise ValueError("API key not provided. Set AGOB_API_KEY environment variable or pass api_key parameter.")
 
         # Initialize Anthropic client
         self.client = anthropic.Anthropic(
@@ -99,7 +100,7 @@ class AgentAnalyzer:
 
         try:
             response = self.client.messages.create(
-                model="claude-sonnet-4-6",
+                model=self.model,
                 max_tokens=1024,
                 messages=[{"role": "user", "content": prompt}]
             )
@@ -134,7 +135,7 @@ class AgentAnalyzer:
 
         try:
             response = self.client.messages.create(
-                model="claude-sonnet-4-6",
+                model=self.model,
                 max_tokens=512,
                 messages=[{"role": "user", "content": prompt}]
             )
@@ -286,7 +287,7 @@ class AgentAnalyzer:
 
         try:
             response = self.client.messages.create(
-                model="claude-sonnet-4-6",
+                model=self.model,
                 max_tokens=512,
                 messages=[{"role": "user", "content": prompt}]
             )
@@ -333,7 +334,7 @@ class AgentAnalyzer:
 
         try:
             response = self.client.messages.create(
-                model="claude-sonnet-4-6",
+                model=self.model,
                 max_tokens=2048,
                 messages=[{"role": "user", "content": prompt}]
             )

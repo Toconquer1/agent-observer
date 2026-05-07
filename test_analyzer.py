@@ -22,7 +22,7 @@ def test_analyzer_no_api_key():
     print("=" * 60)
 
     # Temporarily remove API key if it exists
-    original_key = os.environ.pop("ANTHROPIC_API_KEY", None)
+    original_key = os.environ.pop("AGOB_API_KEY", None)
 
     try:
         # Test data is in parent directory
@@ -45,7 +45,7 @@ def test_analyzer_no_api_key():
     finally:
         # Restore original key
         if original_key:
-            os.environ["ANTHROPIC_API_KEY"] = original_key
+            os.environ["AGOB_API_KEY"] = original_key
 
 
 def test_analyzer_with_invalid_api_key():

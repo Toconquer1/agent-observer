@@ -247,7 +247,7 @@ class AgentWrapper:
 
             # LLM-based analysis (if API key is available)
             analyzed_dir = decoded_dir / "analyzed"
-            if os.getenv("ANTHROPIC_API_KEY"):
+            if os.getenv("AGOB_API_KEY"):
                 try:
                     print()
                     print("[agentob] Starting LLM-based analysis...")
@@ -260,8 +260,8 @@ class AgentWrapper:
                     print("[agentob] Continuing without LLM analysis...")
             else:
                 print()
-                print("[agentob] Skipping LLM analysis (ANTHROPIC_API_KEY not set)")
-                print("[agentob] To enable LLM analysis, set ANTHROPIC_API_KEY in .env file")
+                print("[agentob] Skipping LLM analysis (AGOB_API_KEY not set)")
+                print("[agentob] To enable LLM analysis, set AGOB_API_KEY in .env file")
 
             # Generate visualization
             try:
