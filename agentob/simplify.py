@@ -12,9 +12,9 @@ import copy
 class RequestSimplifier:
     """解码后请求/响应对的简化器"""
 
-    def __init__(self, decoded_dir: str):
+    def __init__(self, decoded_dir: str, output_dir: str):
         self.decoded_dir = Path(decoded_dir)
-        self.output_dir = self.decoded_dir / "analyzed"
+        self.output_dir = Path(output_dir)
         self.mapping = {}
         self.next_idx = 0
         self.all_extracted_tools = {}

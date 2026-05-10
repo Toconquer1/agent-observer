@@ -10,9 +10,9 @@ from typing import Dict, Any, List, Optional
 class CallTraceParser:
     """将简化后的请求/响应对合成为统一调用轨迹的解析器"""
 
-    def __init__(self, decoded_dir: str):
+    def __init__(self, decoded_dir: str, output_dir: str):
         self.decoded_dir = Path(decoded_dir)
-        self.output_dir = self.decoded_dir / "analyzed"
+        self.output_dir = Path(output_dir)
 
     def _is_tool_result_content(self, content_item: Dict[str, Any]) -> bool:
         """检查内容项是否为工具结果"""

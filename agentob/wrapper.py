@@ -229,24 +229,27 @@ class AgentWrapper:
             from .simplify import RequestSimplifier
             from .parser import CallTraceParser
 
-            # 解码 mitm 文件
-            decoded_dir = self.session_dir / "decoded_flows"
-            decoder = MitmDecoder(str(self.mitm_flow_file), str(decoded_dir))
+            raw_dir = self.session_dir / "raw_requests"
+            filtered_dir = self.session_dir / "filtered_requests"
+            analyzed_dir = self.session_dir / "analyzed"
+
+            # 1. 解码 mitm 文件 → raw_requests/
+            decoder = MitmDecoder(str(self.mitm_flow_file), str(raw_dir))
             decoder.decode()
 
-            # 过滤相关请求
-            self._filter_relevant_requests(decoded_dir)
+            # 2. 将原始请求复制到 filtered_requests/ 并过滤
+            shutil.copytree(raw_dir, filtered_dir)
+            self._filter_relevant_requests(filtered_dir)
 
-            # 简化请求
-            simplifier = RequestSimplifier(str(decoded_dir))
+            # 3. 简化请求（在 filtered_requests/ 上进行）
+            simplifier = RequestSimplifier(str(filtered_dir), str(analyzed_dir))
             simplifier.simplify()
 
-            # 解析调用轨迹
-            parser = CallTraceParser(str(decoded_dir))
+            # 4. 解析调用轨迹
+            parser = CallTraceParser(str(filtered_dir), str(analyzed_dir))
             parser.parse()
 
-            # 基于 LLM 的分析（如果 API 密钥可用）
-            analyzed_dir = decoded_dir / "analyzed"
+            # 5. 基于 LLM 的分析（如果 API 密钥可用）
             if os.getenv("AGOB_API_KEY"):
                 try:
                     print()

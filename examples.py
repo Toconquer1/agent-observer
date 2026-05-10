@@ -46,7 +46,8 @@ def example_simplifier_and_parser():
 
     # 简化请求
     simplifier = RequestSimplifier(
-        decoded_dir="./decoded_output"
+        decoded_dir="./decoded_output",
+        output_dir="./decoded_output/analyzed"
     )
 
     try:
@@ -60,7 +61,8 @@ def example_simplifier_and_parser():
 
     # 解析调用轨迹
     parser = CallTraceParser(
-        decoded_dir="./decoded_output"
+        decoded_dir="./decoded_output",
+        output_dir="./decoded_output/analyzed"
     )
 
     try:
@@ -109,12 +111,13 @@ def example_full_pipeline():
 
     # 步骤 3：简化请求
     print("\n步骤 3：正在简化请求...")
-    simplifier = RequestSimplifier(str(decoded_dir))
+    analyzed_dir = output_dir / "analyzed"
+    simplifier = RequestSimplifier(str(decoded_dir), str(analyzed_dir))
     simplifier.simplify()
 
     # 步骤 4：解析调用轨迹
     print("\n步骤 4：正在解析调用轨迹...")
-    parser = CallTraceParser(str(decoded_dir))
+    parser = CallTraceParser(str(decoded_dir), str(analyzed_dir))
     parser.parse()
 
     print("\n流水线完成！")
