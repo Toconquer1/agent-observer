@@ -1,5 +1,5 @@
 """
-Parser module for synthesizing request/response pairs into unified call traces
+解析器模块，将请求/响应对合成为统一的调用轨迹
 """
 import json
 import glob
@@ -8,24 +8,24 @@ from typing import Dict, Any, List, Optional
 
 
 class CallTraceParser:
-    """Parser for synthesizing simplified request/response pairs into unified call traces"""
+    """将简化后的请求/响应对合成为统一调用轨迹的解析器"""
 
     def __init__(self, decoded_dir: str):
         self.decoded_dir = Path(decoded_dir)
         self.output_dir = self.decoded_dir / "analyzed"
 
     def _is_tool_result_content(self, content_item: Dict[str, Any]) -> bool:
-        """Check if a content item is a tool result"""
+        """检查内容项是否为工具结果"""
         return isinstance(content_item, dict) and content_item.get("type") == "tool_result"
 
     def _extract_user_messages(self, messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """Extract genuine user messages (excluding tool results)"""
+        """提取真正的用户消息（排除工具结果）"""
         user_messages = []
         for msg in messages:
             if msg.get("role") == "user":
                 content = msg.get("content", [])
                 if isinstance(content, list):
-                    # Filter out tool_result items
+                    # 过滤掉 tool_result 项
                     genuine_content = [
                         item for item in content
                         if not self._is_tool_result_content(item)
@@ -43,7 +43,7 @@ class CallTraceParser:
         return user_messages
 
     def _extract_tool_results(self, messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """Extract tool result messages from user role messages"""
+        """从 user 角色消息中提取工具结果消息"""
         tool_results = []
         for msg in messages:
             if msg.get("role") == "user":
@@ -60,8 +60,8 @@ class CallTraceParser:
         next_request_body: Optional[Dict[str, Any]]
     ) -> Dict[str, Any]:
         """
-        Compare response content with next request to detect if response appears in next request.
-        Mark matched content and append differences.
+        将响应内容与下一个请求进行比对，检测响应是否出现在下一请求中。
+        标记已匹配的内容并附加差异。
         """
         result = {
             "thinking_matched": False,
@@ -75,26 +75,26 @@ class CallTraceParser:
         if not next_request_body:
             return result
 
-        # Get response content
+        # 获取响应内容
         thinking = response_body.get("integrated_thinking", "")
         text = response_body.get("integrated_text", "")
         tool_calls = response_body.get("tool_calls", [])
 
-        # Get next request messages
+        # 获取下一个请求的消息
         next_messages = next_request_body.get("messages", [])
 
-        # Convert next request to string for comparison
+        # 将下一个请求转为字符串以便比对
         next_request_str = json.dumps(next_messages, ensure_ascii=False, sort_keys=True)
 
-        # Check if thinking appears in next request
+        # 检查思考内容是否出现在下一个请求中
         if thinking and thinking in next_request_str:
             result["thinking_matched"] = True
 
-        # Check if text appears in next request
+        # 检查文本是否出现在下一个请求中
         if text and text in next_request_str:
             result["text_matched"] = True
 
-        # Check if tool calls appear in next request
+        # 检查工具调用是否出现在下一个请求中
         if tool_calls:
             tool_calls_str = json.dumps(tool_calls, ensure_ascii=False, sort_keys=True)
             if tool_calls_str in next_request_str:
@@ -109,41 +109,41 @@ class CallTraceParser:
         response_data: Optional[Dict[str, Any]],
         next_request_data: Optional[Dict[str, Any]]
     ) -> Dict[str, Any]:
-        """Build a single call trace item from request/response pair"""
+        """从请求/响应对构建单个调用轨迹项"""
         req_body = request_data.get("request_body", {})
         res_body = response_data.get("response_body", {}) if response_data else {}
 
-        # Extract messages
+        # 提取消息
         messages = req_body.get("messages", [])
         user_messages = self._extract_user_messages(messages)
         tool_results = self._extract_tool_results(messages)
 
-        # Extract assistant response
+        # 提取助手响应
         thinking = res_body.get("integrated_thinking", "")
         text = res_body.get("integrated_text", "")
         tool_calls = res_body.get("tool_calls", [])
         usage = res_body.get("usage", {})
         stop_reason = res_body.get("stop_reason", "")
 
-        # Compare with next request
+        # 与下一个请求比对
         next_req_body = next_request_data.get("request_body", {}) if next_request_data else None
         comparison = self._compare_response_with_next_request(res_body, next_req_body)
 
-        # Build trace item with information list structure
+        # 构建包含 information_list 结构的轨迹项
         trace_item = {
             "index": index,
             "model": req_body.get("model", ""),
             "information_list": []
         }
 
-        # Add user messages
+        # 添加用户消息
         for user_msg in user_messages:
             trace_item["information_list"].append({
                 "type": "user_message",
                 "content": user_msg["content"]
             })
 
-        # Add tool results (from previous assistant tool calls)
+        # 添加工具结果（来自前序助手的工具调用）
         for tool_result in tool_results:
             trace_item["information_list"].append({
                 "type": "tool_result",
@@ -151,7 +151,7 @@ class CallTraceParser:
                 "content": tool_result.get("content")
             })
 
-        # Add assistant thinking
+        # 添加助手思考内容
         if thinking:
             trace_item["information_list"].append({
                 "type": "assistant_thinking",
@@ -159,7 +159,7 @@ class CallTraceParser:
                 "matched_in_next_request": comparison["thinking_matched"]
             })
 
-        # Add assistant text
+        # 添加助手文本回复
         if text:
             trace_item["information_list"].append({
                 "type": "assistant_text",
@@ -167,7 +167,7 @@ class CallTraceParser:
                 "matched_in_next_request": comparison["text_matched"]
             })
 
-        # Add tool calls
+        # 添加工具调用
         if tool_calls:
             trace_item["information_list"].append({
                 "type": "tool_calls",
@@ -175,47 +175,47 @@ class CallTraceParser:
                 "matched_in_next_request": comparison["tool_calls_matched"]
             })
 
-        # Add usage and stop reason
+        # 添加用量和停止原因
         trace_item["usage"] = usage
         trace_item["stop_reason"] = stop_reason
 
         return trace_item
 
     def parse(self):
-        """Main parsing function to generate unified call trace"""
+        """主解析函数，生成统一的调用轨迹"""
         if not self.decoded_dir.exists():
-            raise FileNotFoundError(f"Decoded directory not found: {self.decoded_dir}")
+            raise FileNotFoundError(f"解码目录未找到: {self.decoded_dir}")
 
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
-        print(f"[parser] Starting to parse call traces from {self.decoded_dir}...")
+        print(f"[parser] 开始从 {self.decoded_dir} 解析调用轨迹...")
 
-        # Find all request files
+        # 查找所有请求文件
         search_pattern = str(self.decoded_dir / "*_request_*.json")
         request_files = glob.glob(search_pattern)
 
         if not request_files:
-            print("[parser] No request files found")
+            print("[parser] 未找到请求文件")
             return
 
-        # Sort by index
+        # 按索引排序
         try:
             request_files.sort(key=lambda x: int(Path(x).name.split('_')[0]))
         except ValueError:
             request_files.sort()
 
-        # Build call trace
+        # 构建调用轨迹
         call_trace = []
 
         for i, req_file in enumerate(request_files):
             req_path = Path(req_file)
             index = int(req_path.name.split('_')[0])
 
-            # Load request
+            # 加载请求
             with open(req_path, 'r', encoding='utf-8') as f:
                 request_data = json.load(f)
 
-            # Find corresponding response
+            # 查找对应的响应
             res_pattern = str(self.decoded_dir / f"{index}_response_*.json")
             res_files = glob.glob(res_pattern)
             response_data = None
@@ -223,13 +223,13 @@ class CallTraceParser:
                 with open(res_files[0], 'r', encoding='utf-8') as f:
                     response_data = json.load(f)
 
-            # Get next request for comparison
+            # 获取下一个请求用于比对
             next_request_data = None
             if i + 1 < len(request_files):
                 with open(request_files[i + 1], 'r', encoding='utf-8') as f:
                     next_request_data = json.load(f)
 
-            # Build trace item
+            # 构建轨迹项
             trace_item = self._build_call_trace_item(
                 index,
                 request_data,
@@ -238,11 +238,11 @@ class CallTraceParser:
             )
 
             call_trace.append(trace_item)
-            print(f"[parser] Parsed call trace item {index}")
+            print(f"[parser] 已解析调用轨迹项 {index}")
 
-        # Write call trace
+        # 写入调用轨迹
         trace_path = self.output_dir / "call_trace.json"
         with open(trace_path, 'w', encoding='utf-8') as f:
             json.dump(call_trace, f, ensure_ascii=False, indent=4)
 
-        print(f"[parser] Call trace with {len(call_trace)} items saved to call_trace.json")
+        print(f"[parser] 包含 {len(call_trace)} 项的调用轨迹已保存至 call_trace.json")

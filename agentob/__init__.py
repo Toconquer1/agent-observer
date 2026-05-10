@@ -1,5 +1,5 @@
 """
-agentob - Agent execution observation tool
+agentob - Agent 执行观测工具
 """
 
 __version__ = "0.1.0"

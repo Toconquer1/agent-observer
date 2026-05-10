@@ -1,5 +1,5 @@
 """
-Simplify module for simplifying and extracting information from decoded requests
+简化模块，用于简化和提取解码后请求中的信息
 """
 import os
 import json
@@ -10,7 +10,7 @@ import copy
 
 
 class RequestSimplifier:
-    """Simplifier for simplifying decoded request/response pairs"""
+    """解码后请求/响应对的简化器"""
 
     def __init__(self, decoded_dir: str):
         self.decoded_dir = Path(decoded_dir)
@@ -22,7 +22,7 @@ class RequestSimplifier:
         self.global_message_pool = {}
 
     def _get_placeholder(self, index: int) -> str:
-        """Generate uppercase letter placeholders: A, B, C... Z, AA, AB..."""
+        """生成大写字母占位符：A, B, C... Z, AA, AB..."""
         res = ""
         while index >= 0:
             res = chr(65 + (index % 26)) + res
@@ -30,7 +30,7 @@ class RequestSimplifier:
         return res
 
     def _get_simplified_text(self, text: str) -> str:
-        """Get or create placeholder for long text"""
+        """获取或创建长文本的占位符"""
         if text not in self.mapping:
             placeholder = self._get_placeholder(self.next_idx)
             self.mapping[text] = f"[{placeholder}]"
@@ -39,14 +39,14 @@ class RequestSimplifier:
 
     def _sanitize_message(self, data: Any) -> Any:
         """
-        Recursively clean dictionary, removing transient fields that LLM discards
-        in historical sessions (like cache_control, signature, etc.),
-        ensuring hash consistency between current and historical requests.
+        递归清理字典，移除 LLM 在历史会话中会丢弃的瞬态字段
+        （如 cache_control、signature 等），
+        确保当前请求与历史请求之间的哈希一致性。
         """
         if isinstance(data, dict):
             cleaned = {}
             for k, v in data.items():
-                # Filter out troublesome fields
+                # 过滤掉有问题的字段
                 if k in ["cache_control", "signature"]:
                     continue
                 cleaned[k] = self._sanitize_message(v)
@@ -58,7 +58,7 @@ class RequestSimplifier:
 
     def _is_tool_result_message(self, msg: Dict[str, Any]) -> bool:
         """
-        Check if a message is a tool result (appears as user role but contains tool_result)
+        检查消息是否为工具结果（表现为 user 角色但包含 tool_result）
         """
         if not isinstance(msg, dict):
             return False
@@ -75,13 +75,12 @@ class RequestSimplifier:
         return False
 
     def _extract_mcp_info(self, req_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-        """Extract MCP server information from request"""
-        # This is a placeholder - actual MCP format needs to be determined
-        # based on real MCP request structure
+        """从请求中提取 MCP 服务器信息"""
+        # 占位函数 - 实际 MCP 格式需要根据真实的 MCP 请求结构来确定
         return None
 
     def _simplify_request(self, filepath: Path, file_index: str) -> bool:
-        """Simplify a single request file"""
+        """简化单个请求文件"""
         with open(filepath, 'r', encoding='utf-8') as f:
             try:
                 data = json.load(f)
@@ -95,17 +94,17 @@ class RequestSimplifier:
         modified = False
         req_type = data.get("type", "unknown")
 
-        # If no type field, assume it's an LLM request if it has messages/system/tools
+        # 如果没有 type 字段，但包含 messages/system/tools，则假定为 LLM 请求
         if req_type == "unknown" and any(k in req_body for k in ["messages", "system", "tools"]):
             req_type = "llm"
             data["type"] = "llm"
             modified = True
 
-        # Only process LLM requests for now
+        # 目前只处理 LLM 请求
         if req_type != "llm":
             return False
 
-        # 1. Simplify and deduplicate message history
+        # 1. 简化并去重消息历史
         if "messages" in req_body and isinstance(req_body["messages"], list):
             simplified_messages = []
 
@@ -114,15 +113,15 @@ class RequestSimplifier:
                     simplified_messages.append(msg)
                     continue
 
-                # Mark tool result messages
+                # 标记工具结果消息
                 if self._is_tool_result_message(msg):
                     msg["_is_tool_result"] = True
 
-                # Clean message before comparison
+                # 在比对前清理消息
                 clean_msg = self._sanitize_message(msg)
 
                 try:
-                    # Generate comparison string using cleaned object
+                    # 使用清理后的对象生成比对字符串
                     msg_str = json.dumps(clean_msg, sort_keys=True, ensure_ascii=False, separators=(',', ':'))
                 except Exception:
                     msg_str = str(clean_msg)
@@ -137,12 +136,12 @@ class RequestSimplifier:
                 else:
                     origin_marker = f"[History origin: Request {file_index}, Msg {i}]"
                     self.global_message_pool[msg_str] = origin_marker
-                    # Keep original message with all its fields
+                    # 保留原始消息及其所有字段
                     simplified_messages.append(msg)
 
             req_body["messages"] = simplified_messages
 
-        # 2. Simplify system field
+        # 2. 简化 system 字段
         if "system" in req_body:
             system_data = req_body["system"]
             if isinstance(system_data, str) and len(system_data) > 50:
@@ -155,7 +154,7 @@ class RequestSimplifier:
                             item["text"] = self._get_simplified_text(item["text"])
                             modified = True
 
-        # 3. Extract and simplify tools
+        # 3. 提取并简化 tools
         if "tools" in req_body and isinstance(req_body["tools"], list):
             simplified_tools = []
             for tool in req_body["tools"]:
@@ -178,29 +177,29 @@ class RequestSimplifier:
         return modified
 
     def simplify(self):
-        """Main analysis function"""
+        """主分析函数"""
         if not self.decoded_dir.exists():
-            raise FileNotFoundError(f"Decoded directory not found: {self.decoded_dir}")
+            raise FileNotFoundError(f"解码目录未找到: {self.decoded_dir}")
 
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
-        print(f"[analyzer] Starting analysis of {self.decoded_dir}...")
+        print(f"[analyzer] 开始分析 {self.decoded_dir}...")
 
-        # Find all request files
+        # 查找所有请求文件
         search_pattern = str(self.decoded_dir / "*_request_*.json")
         request_files = glob.glob(search_pattern)
 
         if not request_files:
-            print("[analyzer] No request files found")
+            print("[analyzer] 未找到请求文件")
             return
 
-        # Sort by index
+        # 按索引排序
         try:
             request_files.sort(key=lambda x: int(os.path.basename(x).split('_')[0]))
         except ValueError:
             request_files.sort()
 
-        # Simplify each request
+        # 逐个简化请求
         modified_count = 0
         for filepath in request_files:
             file_path = Path(filepath)
@@ -209,11 +208,11 @@ class RequestSimplifier:
 
             if self._simplify_request(file_path, file_index):
                 modified_count += 1
-                print(f"[analyzer] Simplified: {filename}")
+                print(f"[analyzer] 已简化: {filename}")
 
-        print(f"[analyzer] Simplified {modified_count} request files")
+        print(f"[analyzer] 已简化 {modified_count} 个请求文件")
 
-        # Write extracted prompts
+        # 写入提取的提示词
         if self.mapping:
             prompts_path = self.output_dir / "prompts.txt"
             with open(prompts_path, 'w', encoding='utf-8') as f:
@@ -221,13 +220,13 @@ class RequestSimplifier:
                     f.write(f"================ {placeholder} ================\n")
                     f.write(text)
                     f.write("\n\n")
-            print(f"[analyzer] Extracted {len(self.mapping)} system prompts to prompts.txt")
+            print(f"[analyzer] 已提取 {len(self.mapping)} 个系统提示词到 prompts.txt")
 
-        # Write extracted tools
+        # 写入提取的工具
         if self.all_extracted_tools:
             tools_path = self.output_dir / "tools.json"
             with open(tools_path, 'w', encoding='utf-8') as f:
                 json.dump(self.all_extracted_tools, f, ensure_ascii=False, indent=4)
-            print(f"[analyzer] Extracted {len(self.all_extracted_tools)} tools to tools.json")
+            print(f"[analyzer] 已提取 {len(self.all_extracted_tools)} 个工具到 tools.json")
 
-        print("[analyzer] Simplification completed!")
+        print("[analyzer] 简化完成！")

@@ -4,9 +4,9 @@ agentob 使用示例
 展示如何通过编程方式使用 agentob 的各个模块
 """
 
-# 示例 1: 使用 Wrapper 执行命令
+# 示例 1：使用 Wrapper 执行命令
 def example_wrapper():
-    """使用 AgentWrapper 包装命令执行"""
+    """使用 AgentWrapper 包装并执行命令"""
     from agentob import AgentWrapper
 
     wrapper = AgentWrapper(
@@ -17,10 +17,10 @@ def example_wrapper():
 
     # 执行目标命令
     return_code = wrapper.run(["echo", "Hello, agentob!"])
-    print(f"Command exited with code: {return_code}")
+    print(f"命令已退出，返回码: {return_code}")
 
 
-# 示例 2: 手动解码 mitm 文件
+# 示例 2：手动解码 mitm 文件
 def example_decoder():
     """解码已有的 mitm 文件"""
     from agentob import MitmDecoder
@@ -32,14 +32,14 @@ def example_decoder():
 
     try:
         decoder.decode()
-        print("Decoding completed successfully!")
+        print("解码成功完成！")
     except FileNotFoundError:
-        print("Error: mitm file not found")
+        print("错误：未找到 mitm 文件")
     except Exception as e:
-        print(f"Error during decoding: {e}")
+        print(f"解码时出错: {e}")
 
 
-# 示例 3: 简化和解析已解码的请求
+# 示例 3：简化和解析已解码的请求
 def example_simplifier_and_parser():
     """简化和解析已解码的请求文件"""
     from agentob import RequestSimplifier, CallTraceParser
@@ -51,11 +51,11 @@ def example_simplifier_and_parser():
 
     try:
         simplifier.simplify()
-        print("Simplification completed successfully!")
+        print("简化成功完成！")
     except FileNotFoundError:
-        print("Error: decoded directory not found")
+        print("错误：未找到解码目录")
     except Exception as e:
-        print(f"Error during simplification: {e}")
+        print(f"简化时出错: {e}")
         return
 
     # 解析调用轨迹
@@ -65,15 +65,15 @@ def example_simplifier_and_parser():
 
     try:
         parser.parse()
-        print("Call trace parsing completed successfully!")
-        print("Check the 'analyzed' subdirectory for results")
+        print("调用轨迹解析成功完成！")
+        print("请查看 'analyzed' 子目录中的结果")
     except FileNotFoundError:
-        print("Error: decoded directory not found")
+        print("错误：未找到解码目录")
     except Exception as e:
-        print(f"Error during parsing: {e}")
+        print(f"解析时出错: {e}")
 
 
-# 示例 4: 完整流程
+# 示例 4：完整流程
 def example_full_pipeline():
     """完整的捕获、解码、简化、解析流程"""
     from agentob import AgentWrapper, MitmDecoder, RequestSimplifier, CallTraceParser
@@ -81,8 +81,8 @@ def example_full_pipeline():
 
     output_dir = Path(".agentob")
 
-    # 步骤 1: 执行命令并捕获流量
-    print("Step 1: Capturing traffic...")
+    # 步骤 1：执行命令并捕获流量
+    print("步骤 1：正在捕获流量...")
     wrapper = AgentWrapper(
         output_dir=str(output_dir),
         proxy_port=8080,
@@ -92,11 +92,11 @@ def example_full_pipeline():
     return_code = wrapper.run(["echo", "test"])
 
     if return_code != 0:
-        print(f"Command failed with code {return_code}")
+        print(f"命令执行失败，返回码 {return_code}")
         return
 
-    # 步骤 2: 解码 mitm 文件
-    print("\nStep 2: Decoding flows...")
+    # 步骤 2：解码 mitm 文件
+    print("\n步骤 2：正在解码流量...")
     mitm_file = output_dir / "flows.mitm"
     decoded_dir = output_dir / "decoded_flows"
 
@@ -104,24 +104,24 @@ def example_full_pipeline():
         decoder = MitmDecoder(str(mitm_file), str(decoded_dir))
         decoder.decode()
     else:
-        print("Warning: No mitm file found")
+        print("警告：未找到 mitm 文件")
         return
 
-    # 步骤 3: 简化请求
-    print("\nStep 3: Simplifying requests...")
+    # 步骤 3：简化请求
+    print("\n步骤 3：正在简化请求...")
     simplifier = RequestSimplifier(str(decoded_dir))
     simplifier.simplify()
 
-    # 步骤 4: 解析调用轨迹
-    print("\nStep 4: Parsing call traces...")
+    # 步骤 4：解析调用轨迹
+    print("\n步骤 4：正在解析调用轨迹...")
     parser = CallTraceParser(str(decoded_dir))
     parser.parse()
 
-    print("\nPipeline completed!")
-    print(f"Results saved in: {output_dir}")
+    print("\n流水线完成！")
+    print(f"结果保存在: {output_dir}")
 
 
-# 示例 5: 自定义分析
+# 示例 5：自定义分析
 def example_custom_analysis():
     """自定义分析逻辑"""
     import json
@@ -132,7 +132,7 @@ def example_custom_analysis():
     # 读取所有请求文件
     request_files = sorted(decoded_dir.glob("*_request_*.json"))
 
-    print(f"Found {len(request_files)} request files")
+    print(f"找到 {len(request_files)} 个请求文件")
 
     for req_file in request_files:
         with open(req_file, 'r', encoding='utf-8') as f:
@@ -152,12 +152,12 @@ def example_custom_analysis():
         tool_count = len(tools)
 
         print(f"\n{req_file.name}:")
-        print(f"  Model: {model}")
-        print(f"  Messages: {msg_count}")
-        print(f"  Tools: {tool_count}")
+        print(f"  模型: {model}")
+        print(f"  消息: {msg_count}")
+        print(f"  工具: {tool_count}")
 
 
-# 示例 6: 提取特定信息
+# 示例 6：提取特定信息
 def example_extract_thinking():
     """提取所有响应中的 thinking 内容"""
     import json
@@ -183,7 +183,7 @@ def example_extract_thinking():
                     "thinking": thinking
                 })
 
-    print(f"Found {len(all_thinking)} responses with thinking")
+    print(f"找到 {len(all_thinking)} 个包含 thinking 的响应")
 
     for item in all_thinking:
         print(f"\n{item['file']}:")

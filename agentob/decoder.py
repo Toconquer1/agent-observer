@@ -1,5 +1,5 @@
 """
-Decoder module for parsing mitmproxy flow files
+解码器模块，用于解析 mitmproxy 流量文件
 """
 import os
 import json
@@ -11,7 +11,7 @@ from mitmproxy.exceptions import FlowReadException
 
 
 class MitmDecoder:
-    """Decoder for mitmproxy flow files"""
+    """mitmproxy 流量文件解码器"""
 
     def __init__(self, input_file: str, output_dir: str):
         self.input_file = Path(input_file)
@@ -19,12 +19,12 @@ class MitmDecoder:
 
     def _parse_sse(self, content: str) -> Dict[str, Any]:
         """
-        Parse SSE (Server-Sent Events) and consolidate all key information
-        (text, thinking, tool calls, usage) together.
+        解析 SSE（Server-Sent Events）并将所有关键信息
+        （文本、思考、工具调用、用量）整合在一起。
         """
         combined_text = ""
         combined_thinking = ""
-        tool_calls = {}  # Use index as key to temporarily store tool call fragments
+        tool_calls = {}  # 以 index 为键临时存储工具调用片段
         usage = {}
         stop_reason = None
 
@@ -40,7 +40,7 @@ class MitmDecoder:
                     data_json = json.loads(data_str)
                     event_type = data_json.get("type", "")
 
-                    # 1. Intercept content block start (primarily for capturing tool call initialization)
+                    # 1. 拦截 content_block_start（主要用于捕获工具调用初始化信息）
                     if event_type == "content_block_start":
                         index = data_json.get("index")
                         cb = data_json.get("content_block", {})
@@ -48,10 +48,10 @@ class MitmDecoder:
                             tool_calls[index] = {
                                 "id": cb.get("id"),
                                 "name": cb.get("name"),
-                                "arguments": ""  # Placeholder for subsequent json_delta
+                                "arguments": ""  # 占位符，后续由 json_delta 填充
                             }
 
-                    # 2. Intercept content block delta (concatenate text, thinking process, and tool arguments)
+                    # 2. 拦截 content_block_delta（拼接文本、思考过程和工具参数）
                     elif event_type == "content_block_delta":
                         index = data_json.get("index")
                         delta = data_json.get("delta", {})
@@ -63,10 +63,10 @@ class MitmDecoder:
                             combined_text += delta.get("text", "")
                         elif delta_type == "input_json_delta":
                             if index in tool_calls:
-                                # Concatenate fragmented tool call JSON arguments
+                                # 拼接碎片化的工具调用 JSON 参数
                                 tool_calls[index]["arguments"] += delta.get("partial_json", "")
 
-                    # 3. Intercept message-level delta (capture stop reason and token usage)
+                    # 3. 拦截 message_delta（捕获停止原因和 token 用量）
                     elif event_type == "message_delta":
                         delta = data_json.get("delta", {})
                         if "stop_reason" in delta:
@@ -74,7 +74,7 @@ class MitmDecoder:
                         if "usage" in data_json:
                             usage = data_json["usage"]
 
-                    # --- Fallback logic for OpenAI format compatibility ---
+                    # --- OpenAI 格式兼容的回退逻辑 ---
                     elif "choices" in data_json and len(data_json["choices"]) > 0:
                         delta = data_json["choices"][0].get("delta", {})
                         if "content" in delta:
@@ -85,27 +85,27 @@ class MitmDecoder:
                 except json.JSONDecodeError:
                     pass
 
-        # Post-processing: Attempt to parse concatenated tool arguments into actual JSON dictionaries
+        # 后处理：尝试将拼接后的工具参数解析为实际的 JSON 字典
         formatted_tool_calls = []
         for tc in tool_calls.values():
             try:
                 if tc["arguments"]:
                     tc["arguments"] = json.loads(tc["arguments"])
             except json.JSONDecodeError:
-                pass  # Keep as raw string if parsing fails
+                pass  # 解析失败则保留原始字符串
             formatted_tool_calls.append(tc)
 
         return {
             "is_sse_stream": True,
             "integrated_thinking": combined_thinking,
             "integrated_text": combined_text,
-            "tool_calls": formatted_tool_calls,  # Fully assembled list of tool calls
-            "usage": usage,  # Token usage statistics
-            "stop_reason": stop_reason  # e.g., "tool_use" or "end_turn"
+            "tool_calls": formatted_tool_calls,  # 完整组装的工具调用列表
+            "usage": usage,  # Token 用量统计
+            "stop_reason": stop_reason  # 例如 "tool_use" 或 "end_turn"
         }
 
     def _extract_body(self, content_bytes: Optional[bytes]) -> Any:
-        """Extract body from bytes"""
+        """从字节中提取 body 内容"""
         if not content_bytes:
             return ""
         try:
@@ -115,7 +115,7 @@ class MitmDecoder:
             return content_bytes.decode('utf-8', errors='ignore')
 
     def _is_llm_request(self, url: str) -> bool:
-        """Check if the request is an LLM API call"""
+        """检查请求是否为 LLM API 调用"""
         llm_patterns = [
             "/v1/messages",
             "/v1/chat/completions",
@@ -123,7 +123,7 @@ class MitmDecoder:
         return any(pattern in url for pattern in llm_patterns)
 
     def _is_mcp_request(self, url: str) -> bool:
-        """Check if the request is an MCP call"""
+        """检查请求是否为 MCP 调用"""
         mcp_patterns = [
             "/mcp/",
             "/mcp-",
@@ -131,13 +131,13 @@ class MitmDecoder:
         return any(pattern in url for pattern in mcp_patterns)
 
     def decode(self):
-        """Decode mitmproxy flow file"""
+        """解码 mitmproxy 流量文件"""
         if not self.input_file.exists():
             raise FileNotFoundError(f"Input file not found: {self.input_file}")
 
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
-        print(f"[decoder] Starting to decode {self.input_file.name}...")
+        print(f"[decoder] 开始解码 {self.input_file.name}...")
 
         with open(self.input_file, "rb") as logfile:
             freader = io.FlowReader(logfile)
@@ -155,14 +155,14 @@ class MitmDecoder:
                             flow.request.timestamp_start
                         ).strftime("%Y%m%d_%H%M%S")
 
-                        # Determine request type
+                        # 判断请求类型
                         req_type = "unknown"
                         if self._is_llm_request(url):
                             req_type = "llm"
                         elif self._is_mcp_request(url):
                             req_type = "mcp"
 
-                        # Extract request body
+                        # 提取请求 body
                         req_body = self._extract_body(flow.request.content)
                         req_data = {
                             "type": req_type,
@@ -176,7 +176,7 @@ class MitmDecoder:
                         with open(req_filename, 'w', encoding='utf-8') as f:
                             json.dump(req_data, f, ensure_ascii=False, indent=4)
 
-                        # Extract response if exists
+                        # 提取响应（如果存在）
                         if flow.response:
                             res_time = datetime.datetime.fromtimestamp(
                                 flow.response.timestamp_start
@@ -200,20 +200,20 @@ class MitmDecoder:
                             with open(res_filename, 'w', encoding='utf-8') as f:
                                 json.dump(res_data, f, ensure_ascii=False, indent=4)
 
-                        print(f"[decoder] Exported {req_type} request/response pair {index} ({req_time})")
+                        print(f"[decoder] 已导出 {req_type} 请求/响应对 {index} ({req_time})")
                         index += 1
 
                     except Exception as e:
                         error_count += 1
-                        print(f"[decoder] Warning: Failed to process flow {index}: {e}")
+                        print(f"[decoder] 警告：处理流 {index} 失败: {e}")
                         continue
 
             except FlowReadException as e:
-                print(f"[decoder] Flow read exception (this is normal at end of file): {e}")
+                print(f"[decoder] 流读取异常（文件末尾出现此异常是正常的）: {e}")
             except Exception as e:
-                print(f"[decoder] Unexpected error: {e}")
+                print(f"[decoder] 意外错误: {e}")
 
         success_count = index - 1
-        print(f"[decoder] Decoding completed! {success_count} request/response pairs extracted")
+        print(f"[decoder] 解码完成！共提取 {success_count} 个请求/响应对")
         if error_count > 0:
-            print(f"[decoder] {error_count} flows skipped due to errors")
+            print(f"[decoder] {error_count} 个流因错误被跳过")

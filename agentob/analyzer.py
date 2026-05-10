@@ -1,8 +1,8 @@
 """
-LLM-based agent call analysis module.
+基于 LLM 的 agent 调用分析模块。
 
-This module analyzes the decoded and parsed agent execution traces using an LLM API.
-It generates insights about system prompts, tools, and individual call traces.
+此模块使用 LLM API 分析解码和解析后的 agent 执行轨迹，
+生成关于系统提示词、工具和各个调用轨迹的分析洞察。
 """
 
 import json
@@ -12,26 +12,26 @@ from typing import Dict, List, Any, Optional
 import anthropic
 from dotenv import load_dotenv
 
-# Load .env file if it exists
+# 加载 .env 文件（如果存在）
 load_dotenv()
 
 
 class AgentAnalyzer:
-    """Analyzes agent execution traces using LLM."""
+    """使用 LLM 分析 agent 执行轨迹。"""
 
     def __init__(self, analyzed_dir: str, api_key: Optional[str] = None, api_url: Optional[str] = None):
         """
-        Initialize the analyzer.
+        初始化分析器。
 
         Args:
-            analyzed_dir: Path to the analyzed directory containing prompts.txt, tools.json, call_trace.json
-            api_key: Anthropic API key (or from .env)
-            api_url: API base URL (or from .env, defaults to Anthropic's API)
+            analyzed_dir: 包含 prompts.txt、tools.json、call_trace.json 的分析目录路径
+            api_key: Anthropic API 密钥（也可从 .env 读取）
+            api_url: API 基础 URL（也可从 .env 读取，默认使用 Anthropic 官方 API）
         """
         self.analyzed_dir = Path(analyzed_dir)
         self.output_file = self.analyzed_dir / "analyze.json"
 
-        # Load API configuration
+        # 加载 API 配置
         self.api_key = api_key or os.getenv("AGOB_API_KEY")
         self.api_url = api_url or os.getenv("AGOB_API_URL", "https://api.anthropic.com")
         self.model = os.getenv("AGOB_MODEL", "claude-sonnet-4-6")
@@ -39,43 +39,43 @@ class AgentAnalyzer:
         if not self.api_key:
             raise ValueError("API key not provided. Set AGOB_API_KEY environment variable or pass api_key parameter.")
 
-        # Initialize Anthropic client
+        # 初始化 Anthropic 客户端
         self.client = anthropic.Anthropic(
             api_key=self.api_key,
             base_url=self.api_url
         )
 
-        # Load input files
+        # 加载输入文件
         self.prompts = self._load_prompts()
         self.tools = self._load_tools()
         self.call_trace = self._load_call_trace()
 
     def _load_prompts(self) -> str:
-        """Load system prompts from prompts.txt."""
+        """从 prompts.txt 加载系统提示词。"""
         prompts_file = self.analyzed_dir / "prompts.txt"
         if not prompts_file.exists():
             return ""
         return prompts_file.read_text(encoding="utf-8")
 
     def _load_tools(self) -> List[Dict[str, Any]]:
-        """Load tools from tools.json."""
+        """从 tools.json 加载工具列表。"""
         tools_file = self.analyzed_dir / "tools.json"
         if not tools_file.exists():
             return []
         with open(tools_file, "r", encoding="utf-8") as f:
             data = json.load(f)
-            # tools.json can be either a list or a dict
+            # tools.json 可能是列表或字典
             if isinstance(data, list):
                 return data
             elif isinstance(data, dict):
-                # Convert dict to list of tools
+                # 将字典转换为工具列表
                 return [{"name": name, **tool_data} if isinstance(tool_data, dict) else {"name": name, "description": str(tool_data)}
                         for name, tool_data in data.items()]
             else:
                 return []
 
     def _load_call_trace(self) -> List[Dict[str, Any]]:
-        """Load call trace from call_trace.json."""
+        """从 call_trace.json 加载调用轨迹。"""
         trace_file = self.analyzed_dir / "call_trace.json"
         if not trace_file.exists():
             return []
@@ -83,14 +83,14 @@ class AgentAnalyzer:
             return json.load(f)
 
     def _analyze_system_prompt(self) -> str:
-        """Analyze system prompts to understand agent's working mode."""
+        """分析系统提示词，理解 agent 的工作模式。"""
         if not self.prompts:
             return ""
 
         prompt = f"""请分析以下系统提示词，总结出当前 agent 的工作模式、能力范围和行为特征。
 
 系统提示词：
-{self.prompts[:8000]}  # Limit to avoid token overflow
+{self.prompts[:8000]}  # 限制长度以避免超出 token 上限
 
 请用中文简要总结（200-300字）：
 1. Agent 的主要角色和定位
@@ -110,15 +110,15 @@ class AgentAnalyzer:
             return ""
 
     def _analyze_tools(self) -> str:
-        """Analyze available tools and summarize their capabilities."""
+        """分析可用工具并总结其功能。"""
         if not self.tools:
             return ""
 
-        # Extract tool names and descriptions
+        # 提取工具名称和描述
         tool_summary = []
-        for tool in self.tools[:50]:  # Limit to first 50 tools
+        for tool in self.tools[:50]:  # 最多取前 50 个工具
             name = tool.get("name", "Unknown")
-            desc = tool.get("description", "")[:200]  # Limit description length
+            desc = tool.get("description", "")[:200]  # 限制描述长度
             tool_summary.append(f"- {name}: {desc}")
 
         tools_text = "\n".join(tool_summary)
@@ -145,8 +145,8 @@ class AgentAnalyzer:
             return ""
 
     def _get_context_items(self, current_index: int, all_items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """Get the current item and up to 5 previous items for context."""
-        # Find the position of current item in the flattened list
+        """获取当前项及最多前 5 个项作为上下文。"""
+        # 在扁平化列表中查找当前项的位置
         flat_items = []
         for call in self.call_trace:
             for item in call.get("information_list", []):
@@ -156,7 +156,7 @@ class AgentAnalyzer:
                     **item
                 })
 
-        # Find current item position
+        # 查找当前项位置
         current_pos = -1
         for i, item in enumerate(flat_items):
             if item == all_items[current_index]:
@@ -166,23 +166,23 @@ class AgentAnalyzer:
         if current_pos == -1:
             return [all_items[current_index]]
 
-        # Get up to 5 previous items + current
+        # 取最多 5 个前序项 + 当前项
         start = max(0, current_pos - 5)
         return flat_items[start:current_pos + 1]
 
     def _analyze_single_item(self, item: Dict[str, Any], context: List[Dict[str, Any]],
                             previous_analysis: List[Dict[str, Any]]) -> Dict[str, str]:
         """
-        Analyze a single information item.
+        分析单个信息项。
 
         Returns:
-            Dict with 'summary' and 'analysis' keys
+            包含 'summary' 和 'analysis' 键的字典
         """
         item_type = item.get("type", "unknown")
 
-        # Build context summary
+        # 构建上下文摘要
         context_text = "前序上下文：\n"
-        for ctx_item in context[:-1]:  # Exclude current item
+        for ctx_item in context[:-1]:  # 排除当前项
             ctx_type = ctx_item.get("type", "unknown")
             if ctx_type == "user_message":
                 content = str(ctx_item.get("content", ""))[:200]
@@ -196,14 +196,14 @@ class AgentAnalyzer:
                 text = ctx_item.get("content", "")[:100]
                 context_text += f"- 助手回复: {text}...\n"
 
-        # Build previous analysis summary
+        # 构建前序分析摘要
         prev_summary = ""
         if previous_analysis:
             prev_summary = "之前的分析摘要：\n"
-            for prev in previous_analysis[-3:]:  # Last 3 analyses
+            for prev in previous_analysis[-3:]:  # 最近 3 条分析
                 prev_summary += f"- {prev.get('summary', '')}...\n"
 
-        # Create analysis prompt based on item type
+        # 根据项类型创建分析提示词
         if item_type == "user_message":
             content = json.dumps(item.get("content", []), ensure_ascii=False, indent=2)[:1000]
             prompt = f"""{context_text}
@@ -278,7 +278,7 @@ class AgentAnalyzer:
 """
 
         else:
-            # Unknown type
+            # 未知类型
             return {
                 "summary": f"未知类型: {item_type}",
                 "analysis": "无法分析此类型的项目",
@@ -292,9 +292,9 @@ class AgentAnalyzer:
                 messages=[{"role": "user", "content": prompt}]
             )
 
-            # Parse JSON response
+            # 解析 JSON 响应
             result_text = response.content[0].text
-            # Try to extract JSON from response
+            # 尝试从响应中提取 JSON
             if "{" in result_text and "}" in result_text:
                 start = result_text.index("{")
                 end = result_text.rindex("}") + 1
@@ -315,10 +315,10 @@ class AgentAnalyzer:
             }
 
     def _generate_overall_analysis(self, item_analyses: List[Dict[str, Any]]) -> str:
-        """Generate overall analysis report based on all item analyses."""
-        # Build summary of all analyses
+        """基于所有项的分析生成整体分析报告。"""
+        # 构建所有分析的摘要
         summary_text = "各项调用分析摘要：\n"
-        for i, analysis in enumerate(item_analyses[:20]):  # Limit to first 20
+        for i, analysis in enumerate(item_analyses[:20]):  # 最多取前 20 条
             summary_text += f"{i+1}. {analysis.get('summary', '')} (评分: {analysis.get('score', 0)})\n"
 
         prompt = f"""基于以下 agent 调用过程的分析，请生成一份整体分析报告。
@@ -345,10 +345,10 @@ class AgentAnalyzer:
 
     def analyze(self) -> Dict[str, Any]:
         """
-        Perform complete analysis and generate analyze.json.
+        执行完整分析并生成 analyze.json。
 
         Returns:
-            Analysis result dictionary
+            分析结果字典
         """
         result = {
             "system_prompt_analysis": "",
@@ -358,16 +358,16 @@ class AgentAnalyzer:
         }
 
         try:
-            # 1. Analyze system prompt
-            print("Analyzing system prompt...")
+            # 1. 分析系统提示词
+            print("正在分析系统提示词...")
             result["system_prompt_analysis"] = self._analyze_system_prompt()
 
-            # 2. Analyze tools
-            print("Analyzing tools...")
+            # 2. 分析工具
+            print("正在分析工具...")
             result["tools_analysis"] = self._analyze_tools()
 
-            # 3. Analyze each call item
-            print("Analyzing call trace items...")
+            # 3. 分析每个调用项
+            print("正在分析调用轨迹项...")
             all_items = []
             for call in self.call_trace:
                 for item in call.get("information_list", []):
@@ -382,15 +382,15 @@ class AgentAnalyzer:
 
             result["call_analyses"] = item_analyses
 
-            # 4. Generate overall analysis
-            print("Generating overall analysis...")
+            # 4. 生成整体分析
+            print("正在生成整体分析...")
             result["overall_analysis"] = self._generate_overall_analysis(item_analyses)
 
         except Exception as e:
             print(f"Error during analysis: {e}")
-            # Keep partial results
+            # 保留部分结果
 
-        # Save result
+        # 保存结果
         with open(self.output_file, "w", encoding="utf-8") as f:
             json.dump(result, f, ensure_ascii=False, indent=2)
 
@@ -401,15 +401,15 @@ class AgentAnalyzer:
 def analyze_agent_execution(analyzed_dir: str, api_key: Optional[str] = None,
                             api_url: Optional[str] = None) -> Dict[str, Any]:
     """
-    Convenience function to analyze agent execution.
+    分析 agent 执行的便捷函数。
 
     Args:
-        analyzed_dir: Path to analyzed directory
-        api_key: Anthropic API key
-        api_url: API base URL
+        analyzed_dir: 分析目录路径
+        api_key: Anthropic API 密钥
+        api_url: API 基础 URL
 
     Returns:
-        Analysis result dictionary
+        分析结果字典
     """
     analyzer = AgentAnalyzer(analyzed_dir, api_key, api_url)
     return analyzer.analyze()

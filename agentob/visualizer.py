@@ -1,7 +1,7 @@
 """
-HTML visualization generator for agent execution analysis.
+用于 agent 执行分析的 HTML 可视化生成器。
 
-Generates an interactive, standalone HTML page to visualize agent execution traces.
+生成一个交互式的独立 HTML 页面来可视化 agent 执行轨迹。
 """
 
 import json
@@ -11,33 +11,33 @@ from datetime import datetime
 
 
 class AgentVisualizer:
-    """Generates interactive HTML visualization of agent execution."""
+    """生成 agent 执行的交互式 HTML 可视化。"""
 
     def __init__(self, analyzed_dir: str):
         """
-        Initialize the visualizer.
+        初始化可视化器。
 
         Args:
-            analyzed_dir: Path to the analyzed directory
+            analyzed_dir: 分析目录路径
         """
         self.analyzed_dir = Path(analyzed_dir)
         self.output_file = self.analyzed_dir.parent / "visualization.html"
 
-        # Load data
+        # 加载数据
         self.prompts = self._load_prompts()
         self.tools = self._load_tools()
         self.call_trace = self._load_call_trace()
         self.analysis = self._load_analysis()
 
     def _load_prompts(self) -> str:
-        """Load system prompts."""
+        """加载系统提示词。"""
         prompts_file = self.analyzed_dir / "prompts.txt"
         if not prompts_file.exists():
             return ""
         return prompts_file.read_text(encoding="utf-8")
 
     def _load_tools(self) -> Dict[str, Any]:
-        """Load tools."""
+        """加载工具列表。"""
         tools_file = self.analyzed_dir / "tools.json"
         if not tools_file.exists():
             return {}
@@ -45,7 +45,7 @@ class AgentVisualizer:
             return json.load(f)
 
     def _load_call_trace(self) -> List[Dict[str, Any]]:
-        """Load call trace."""
+        """加载调用轨迹。"""
         trace_file = self.analyzed_dir / "call_trace.json"
         if not trace_file.exists():
             return []
@@ -53,7 +53,7 @@ class AgentVisualizer:
             return json.load(f)
 
     def _load_analysis(self) -> Optional[Dict[str, Any]]:
-        """Load LLM analysis if available."""
+        """加载 LLM 分析结果（如果存在）。"""
         analysis_file = self.analyzed_dir / "analyze.json"
         if not analysis_file.exists():
             return None
@@ -61,7 +61,7 @@ class AgentVisualizer:
             return json.load(f)
 
     def _escape_html(self, text: str) -> str:
-        """Escape HTML special characters."""
+        """转义 HTML 特殊字符。"""
         return (text
                 .replace("&", "&amp;")
                 .replace("<", "&lt;")
@@ -70,18 +70,18 @@ class AgentVisualizer:
                 .replace("'", "&#39;"))
 
     def _format_json(self, data: Any) -> str:
-        """Format JSON data for display."""
+        """格式化 JSON 数据以便显示。"""
         return json.dumps(data, ensure_ascii=False, indent=2)
 
     def _generate_html(self) -> str:
-        """Generate the complete HTML document."""
+        """生成完整的 HTML 文档。"""
 
-        # Count statistics
+        # 统计信息
         total_calls = len(self.call_trace)
         total_items = sum(len(call.get("information_list", [])) for call in self.call_trace)
         tool_count = len(self.tools) if isinstance(self.tools, dict) else len(self.tools)
 
-        # Generate HTML
+        # 生成 HTML
         html = f"""<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -563,7 +563,7 @@ class AgentVisualizer:
         return html
 
     def _generate_sidebar_analysis(self) -> str:
-        """Generate sidebar analysis section."""
+        """生成侧边栏分析部分。"""
         if not self.analysis:
             return ""
 
@@ -571,7 +571,7 @@ class AgentVisualizer:
         if not overall:
             return ""
 
-        # Truncate if too long
+        # 如果太长则截断
         display_text = overall[:300] + ("..." if len(overall) > 300 else "")
 
         return f'''<div class="sidebar-section">
@@ -585,14 +585,14 @@ class AgentVisualizer:
         </div>'''
 
     def _generate_sidebar_tools(self) -> str:
-        """Generate sidebar tools section."""
+        """生成侧边栏工具部分。"""
         if not self.tools:
             return ""
 
         tools_html = '<div class="tool-list">'
 
         if isinstance(self.tools, dict):
-            for name, tool_data in list(self.tools.items())[:20]:  # Limit to 20
+            for name, tool_data in list(self.tools.items())[:20]:  # 最多显示 20 个
                 desc = ""
                 if isinstance(tool_data, dict):
                     desc = tool_data.get("description", "")[:80]
@@ -622,11 +622,11 @@ class AgentVisualizer:
         </div>'''
 
     def _generate_sidebar_prompts(self) -> str:
-        """Generate sidebar prompts section."""
+        """生成侧边栏提示词部分。"""
         if not self.prompts:
             return ""
 
-        # Truncate
+        # 截断
         display_text = self.prompts[:500] + ("..." if len(self.prompts) > 500 else "")
 
         return f'''<div class="sidebar-section">
@@ -640,7 +640,7 @@ class AgentVisualizer:
         </div>'''
 
     def _generate_chat_messages(self) -> str:
-        """Generate chat-style messages."""
+        """生成聊天风格的消息。"""
         if not self.call_trace:
             return '<div style="text-align: center; padding: 3rem; color: var(--color-text-muted);">无调用轨迹</div>'
 
@@ -660,9 +660,9 @@ class AgentVisualizer:
 
     def _generate_message(self, item: Dict[str, Any], item_type: str,
                          call_analyses: List[Dict[str, Any]], item_index: int) -> str:
-        """Generate a single chat message."""
+        """生成单条聊天消息。"""
 
-        # Determine message class and avatar
+        # 确定消息样式类别和头像
         if item_type == "user_message":
             msg_class = "user"
             avatar = "👤"
@@ -692,12 +692,12 @@ class AgentVisualizer:
         html += f'<div class="message-avatar">{avatar}</div>'
         html += '<div class="message-content">'
 
-        # Get analysis if available
+        # 获取分析结果（如果存在）
         analysis = None
         if item_index < len(call_analyses):
             analysis = call_analyses[item_index]
 
-        # Generate message bubbles based on type
+        # 根据类型生成消息气泡
         if item_type == "user_message":
             content = item.get("content", [])
             if isinstance(content, list):
@@ -759,7 +759,7 @@ class AgentVisualizer:
             html += f'<div class="message-text">{self._escape_html(content)}</div>'
             html += '</div>'
 
-        # Add analysis box if available
+        # 如果有分析结果则添加分析框
         if analysis:
             summary = analysis.get("summary", "")
             analysis_text = analysis.get("analysis", "")
@@ -782,10 +782,10 @@ class AgentVisualizer:
 
     def generate(self) -> str:
         """
-        Generate the HTML visualization.
+        生成 HTML 可视化。
 
         Returns:
-            Path to the generated HTML file
+            生成的 HTML 文件路径
         """
         html = self._generate_html()
 
@@ -798,13 +798,13 @@ class AgentVisualizer:
 
 def generate_visualization(analyzed_dir: str) -> str:
     """
-    Convenience function to generate visualization.
+    生成可视化的便捷函数。
 
     Args:
-        analyzed_dir: Path to analyzed directory
+        analyzed_dir: 分析目录路径
 
     Returns:
-        Path to generated HTML file
+        生成的 HTML 文件路径
     """
     visualizer = AgentVisualizer(analyzed_dir)
     return visualizer.generate()

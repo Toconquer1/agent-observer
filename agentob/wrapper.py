@@ -1,5 +1,5 @@
 """
-Core wrapper module for managing agent execution with proxy
+核心包装模块，用于通过代理管理 agent 执行
 """
 import os
 import sys
@@ -13,7 +13,7 @@ from typing import List, Optional
 
 
 class AgentWrapper:
-    """Wrapper for executing agent commands with mitmproxy observation"""
+    """通过 mitmproxy 观测来执行 agent 命令的包装器"""
 
     def __init__(self, output_dir: str = ".agentob", proxy_port: int = 8080, auto_analysis: bool = True):
         self.output_dir = Path(output_dir).resolve()
@@ -21,45 +21,45 @@ class AgentWrapper:
         self.auto_analysis = auto_analysis
         self.mitm_process: Optional[subprocess.Popen] = None
 
-        # Generate session ID
+        # 生成会话 ID
         self.session_id = uuid.uuid4().hex[:8]
         self.session_dir = self.output_dir / self.session_id
         self.mitm_flow_file = self.session_dir / "flows.mitm"
 
     def _ensure_mitmproxy_installed(self) -> bool:
-        """Check if mitmproxy is installed, return True if available"""
+        """检查 mitmproxy 是否已安装，可用则返回 True"""
         mitmdump_path = shutil.which("mitmdump")
         if mitmdump_path:
             print(f"[agentob] Found mitmproxy at: {mitmdump_path}")
             return True
 
-        print("[agentob] mitmproxy not found, attempting to install via pip...")
+        print("[agentob] 未找到 mitmproxy，尝试通过 pip 安装...")
         try:
             subprocess.check_call(
                 [sys.executable, "-m", "pip", "install", "mitmproxy"],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE
             )
-            print("[agentob] mitmproxy installed successfully")
+            print("[agentob] mitmproxy 安装成功")
             return True
         except subprocess.CalledProcessError as e:
-            print(f"[agentob] Failed to install mitmproxy: {e}")
+            print(f"[agentob] mitmproxy 安装失败: {e}")
             return False
 
     def _start_mitmproxy(self) -> bool:
-        """Start mitmproxy in background"""
+        """在后台启动 mitmproxy"""
         if not self._ensure_mitmproxy_installed():
             return False
 
-        # Ensure session directory exists
+        # 确保会话目录存在
         self.session_dir.mkdir(parents=True, exist_ok=True)
 
         mitmdump_path = shutil.which("mitmdump")
         if not mitmdump_path:
-            print("[agentob] Error: mitmdump not found after installation")
+            print("[agentob] 错误：安装后未找到 mitmdump")
             return False
 
-        # Start mitmdump in background
+        # 在后台启动 mitmdump
         cmd = [
             mitmdump_path,
             "-p", str(self.proxy_port),
@@ -67,7 +67,7 @@ class AgentWrapper:
         ]
 
         try:
-            # On Windows, use CREATE_NEW_PROCESS_GROUP to allow proper cleanup
+            # 在 Windows 上，使用 CREATE_NEW_PROCESS_GROUP 以便正确清理
             if sys.platform == "win32":
                 self.mitm_process = subprocess.Popen(
                     cmd,
@@ -83,54 +83,54 @@ class AgentWrapper:
                     preexec_fn=os.setsid
                 )
 
-            # Wait a bit for proxy to start
+            # 等待代理启动
             time.sleep(2)
 
-            # Check if process is still running
+            # 检查进程是否仍在运行
             if self.mitm_process.poll() is not None:
-                print("[agentob] Error: mitmproxy failed to start")
+                print("[agentob] 错误：mitmproxy 启动失败")
                 return False
 
-            print(f"[agentob] mitmproxy started on port {self.proxy_port}")
+            print(f"[agentob] mitmproxy 已在端口 {self.proxy_port} 启动")
             return True
 
         except Exception as e:
-            print(f"[agentob] Failed to start mitmproxy: {e}")
+            print(f"[agentob] 启动 mitmproxy 失败: {e}")
             return False
 
     def _stop_mitmproxy(self):
-        """Stop mitmproxy process"""
+        """停止 mitmproxy 进程"""
         if self.mitm_process is None:
             return
 
         try:
             if sys.platform == "win32":
-                # On Windows, send CTRL_BREAK_EVENT
+                # 在 Windows 上，发送 CTRL_BREAK_EVENT
                 self.mitm_process.send_signal(signal.CTRL_BREAK_EVENT)
             else:
-                # On Unix, send SIGTERM to process group
+                # 在 Unix 上，向进程组发送 SIGTERM
                 os.killpg(os.getpgid(self.mitm_process.pid), signal.SIGTERM)
 
-            # Wait for process to terminate
+            # 等待进程终止
             try:
                 self.mitm_process.wait(timeout=5)
             except subprocess.TimeoutExpired:
-                # Force kill if it doesn't stop
+                # 超时则强制终止
                 self.mitm_process.kill()
                 self.mitm_process.wait()
 
-            print("[agentob] mitmproxy stopped")
+            print("[agentob] mitmproxy 已停止")
 
         except Exception as e:
-            print(f"[agentob] Error stopping mitmproxy: {e}")
+            print(f"[agentob] 停止 mitmproxy 时出错: {e}")
 
     def _build_env(self) -> dict:
-        """Build environment variables with proxy settings"""
+        """构建包含代理设置的环境变量"""
         env = os.environ.copy()
 
         proxy_url = f"http://127.0.0.1:{self.proxy_port}"
 
-        # Get mitmproxy certificate path
+        # 获取 mitmproxy 证书路径
         home = Path.home()
         mitm_cert = home / ".mitmproxy" / "mitmproxy-ca-cert.pem"
 
@@ -139,16 +139,16 @@ class AgentWrapper:
             "HTTPS_PROXY": proxy_url,
         })
 
-        # For Node.js applications (like Claude Code)
-        # Use proper certificate instead of disabling verification
+        # 对于 Node.js 应用（如 Claude Code）
+        # 使用正确的证书而不是禁用验证
         if mitm_cert.exists():
             env["NODE_EXTRA_CA_CERTS"] = str(mitm_cert)
         else:
-            # Fallback: disable verification if cert not found
+            # 回退方案：找不到证书则禁用验证
             env["NODE_TLS_REJECT_UNAUTHORIZED"] = "0"
-            print("[agentob] Warning: mitmproxy certificate not found, disabling TLS verification")
+            print("[agentob] 警告：未找到 mitmproxy 证书，已禁用 TLS 验证")
 
-        # For Python applications (like langchain)
+        # 对于 Python 应用（如 langchain）
         if mitm_cert.exists():
             env.update({
                 "REQUESTS_CA_BUNDLE": str(mitm_cert),
@@ -158,9 +158,9 @@ class AgentWrapper:
         return env
 
     def _resolve_command(self, cmd: List[str]) -> List[str]:
-        """Resolve command executable to full path"""
+        """将命令可执行文件解析为完整路径"""
         if not cmd:
-            raise ValueError("No command specified")
+            raise ValueError("未指定命令")
 
         executable = cmd[0]
         args = cmd[1:]
@@ -172,27 +172,27 @@ class AgentWrapper:
         return [resolved, *args]
 
     def _run_target_command(self, target_cmd: List[str]) -> int:
-        """Run the target agent command with proxy environment"""
+        """使用代理环境运行目标 agent 命令"""
         try:
             resolved_cmd = self._resolve_command(target_cmd)
         except Exception as e:
-            print(f"[agentob] Error: {e}")
+            print(f"[agentob] 错误: {e}")
             return 127
 
         env = self._build_env()
 
         print("=" * 60)
-        print("[agentob] Starting agent application")
-        print(f"[agentob] Session ID: {self.session_id}")
-        print(f"[agentob] Original command: {' '.join(target_cmd)}")
-        print(f"[agentob] Resolved command: {' '.join(resolved_cmd)}")
-        print("[agentob] Injected environment variables:")
+        print("[agentob] 正在启动 agent 应用")
+        print(f"[agentob] 会话 ID: {self.session_id}")
+        print(f"[agentob] 原始命令: {' '.join(target_cmd)}")
+        print(f"[agentob] 解析后命令: {' '.join(resolved_cmd)}")
+        print("[agentob] 已注入的环境变量:")
         print(f"[agentob]   HTTP_PROXY={env.get('HTTP_PROXY')}")
         print(f"[agentob]   HTTPS_PROXY={env.get('HTTPS_PROXY')}")
         print(f"[agentob]   NODE_TLS_REJECT_UNAUTHORIZED={env.get('NODE_TLS_REJECT_UNAUTHORIZED')}")
         print()
-        print("[agentob] Entering target application's native CLI")
-        print("[agentob] After exiting, analysis will be performed")
+        print("[agentob] 正在进入目标应用的原生 CLI")
+        print("[agentob] 退出后将执行分析")
         print("=" * 60)
         print()
 
@@ -208,20 +208,20 @@ class AgentWrapper:
 
         except KeyboardInterrupt:
             print()
-            print("[agentob] Received Ctrl+C, exiting...")
+            print("[agentob] 收到 Ctrl+C，正在退出...")
             return 130
 
         return return_code
 
     def _analyze_flows(self):
-        """Analyze captured flows"""
+        """分析捕获的流量"""
         if not self.mitm_flow_file.exists():
-            print("[agentob] Warning: No flow file found, skipping analysis")
+            print("[agentob] 警告：未找到流量文件，跳过分析")
             return
 
         print()
         print("=" * 60)
-        print("[agentob] Starting flow analysis...")
+        print("[agentob] 开始流量分析...")
         print("=" * 60)
 
         try:
@@ -229,73 +229,73 @@ class AgentWrapper:
             from .simplify import RequestSimplifier
             from .parser import CallTraceParser
 
-            # Decode mitm file
+            # 解码 mitm 文件
             decoded_dir = self.session_dir / "decoded_flows"
             decoder = MitmDecoder(str(self.mitm_flow_file), str(decoded_dir))
             decoder.decode()
 
-            # Filter relevant requests
+            # 过滤相关请求
             self._filter_relevant_requests(decoded_dir)
 
-            # Simplify requests
+            # 简化请求
             simplifier = RequestSimplifier(str(decoded_dir))
             simplifier.simplify()
 
-            # Parse call traces
+            # 解析调用轨迹
             parser = CallTraceParser(str(decoded_dir))
             parser.parse()
 
-            # LLM-based analysis (if API key is available)
+            # 基于 LLM 的分析（如果 API 密钥可用）
             analyzed_dir = decoded_dir / "analyzed"
             if os.getenv("AGOB_API_KEY"):
                 try:
                     print()
-                    print("[agentob] Starting LLM-based analysis...")
+                    print("[agentob] 开始 LLM 分析...")
                     from .analyzer import AgentAnalyzer
                     analyzer = AgentAnalyzer(str(analyzed_dir))
                     analyzer.analyze()
-                    print("[agentob] LLM analysis completed!")
+                    print("[agentob] LLM 分析完成！")
                 except Exception as e:
-                    print(f"[agentob] LLM analysis failed: {e}")
-                    print("[agentob] Continuing without LLM analysis...")
+                    print(f"[agentob] LLM 分析失败: {e}")
+                    print("[agentob] 继续进行无 LLM 的分析...")
             else:
                 print()
-                print("[agentob] Skipping LLM analysis (AGOB_API_KEY not set)")
-                print("[agentob] To enable LLM analysis, set AGOB_API_KEY in .env file")
+                print("[agentob] 跳过 LLM 分析（未设置 AGOB_API_KEY）")
+                print("[agentob] 要启用 LLM 分析，请在 .env 文件中设置 AGOB_API_KEY")
 
-            # Generate visualization
+            # 生成可视化
             try:
                 print()
-                print("[agentob] Generating visualization...")
+                print("[agentob] 正在生成可视化...")
                 from .visualizer import AgentVisualizer
                 visualizer = AgentVisualizer(str(analyzed_dir))
                 html_path = visualizer.generate()
-                print(f"[agentob] Visualization saved: {html_path}")
+                print(f"[agentob] 可视化已保存: {html_path}")
             except Exception as e:
-                print(f"[agentob] Visualization generation failed: {e}")
+                print(f"[agentob] 可视化生成失败: {e}")
                 import traceback
                 traceback.print_exc()
 
             print()
             print("=" * 60)
-            print("[agentob] Analysis completed!")
-            print(f"[agentob] Session ID: {self.session_id}")
-            print(f"[agentob] Results saved in: {self.session_dir}")
+            print("[agentob] 分析完成！")
+            print(f"[agentob] 会话 ID: {self.session_id}")
+            print(f"[agentob] 结果保存在: {self.session_dir}")
             print("=" * 60)
 
         except Exception as e:
-            print(f"[agentob] Error during analysis: {e}")
+            print(f"[agentob] 分析过程中出错: {e}")
             import traceback
             traceback.print_exc()
 
     def _filter_relevant_requests(self, decoded_dir: Path):
-        """Filter decoded requests to only keep LLM API related traffic"""
+        """过滤解码后的请求，仅保留 LLM API 相关流量"""
         import json
 
         total_count = 0
         kept_count = 0
 
-        # Iterate through request files only
+        # 仅遍历请求文件
         for req_file in decoded_dir.glob("*_request_*.json"):
             total_count += 1
             try:
@@ -304,54 +304,54 @@ class AgentWrapper:
 
                 url = data.get('url', '')
 
-                # Check if it's an LLM API request (Anthropic-compatible format)
-                # Matches: /v1/messages, /v1/chat/completions, etc.
+                # 检查是否为 LLM API 请求（兼容 Anthropic 格式）
+                # 匹配: /v1/messages, /v1/chat/completions 等
                 is_llm = '/v1/messages' in url or '/v1/chat/completions' in url
 
-                # Keep the file if it's an LLM request
+                # 如果是 LLM 请求则保留
                 if is_llm:
                     kept_count += 1
                 else:
-                    # Extract index from filename (e.g., "1_request_20260402_155849.json" -> "1")
-                    req_basename = req_file.stem  # e.g., "1_request_20260402_155849"
+                    # 从文件名提取索引（如 "1_request_20260402_155849.json" -> "1"）
+                    req_basename = req_file.stem  # 如 "1_request_20260402_155849"
                     index = req_basename.split('_')[0]
 
-                    # Find and delete corresponding response file
+                    # 查找并删除对应的响应文件
                     for res_file in decoded_dir.glob(f"{index}_response_*.json"):
                         res_file.unlink()
 
-                    # Delete the request file
+                    # 删除请求文件
                     req_file.unlink()
 
             except Exception as e:
-                print(f"[agentob] Warning: Failed to filter {req_file.name}: {e}")
+                print(f"[agentob] 警告：过滤 {req_file.name} 失败: {e}")
 
         removed_count = total_count - kept_count
-        print(f"[agentob] Kept {kept_count}/{total_count} LLM request pairs, removed {removed_count}")
+        print(f"[agentob] 保留了 {kept_count}/{total_count} 个 LLM 请求对，移除了 {removed_count} 个")
 
     def run(self, target_command: List[str]) -> int:
-        """Main execution flow"""
-        # Start mitmproxy
+        """主执行流程"""
+        # 启动 mitmproxy
         if not self._start_mitmproxy():
-            print("[agentob] Failed to start proxy, aborting")
+            print("[agentob] 代理启动失败，中止")
             return 1
 
         try:
-            # Run target command
+            # 运行目标命令
             return_code = self._run_target_command(target_command)
 
             print()
             print("=" * 60)
-            print("[agentob] Target application exited")
-            print(f"[agentob] Exit code: {return_code}")
+            print("[agentob] 目标应用已退出")
+            print(f"[agentob] 退出码: {return_code}")
             print("=" * 60)
 
-            # Analyze flows if enabled
+            # 如果启用，进行流量分析
             if self.auto_analysis:
                 self._analyze_flows()
 
             return return_code
 
         finally:
-            # Always stop mitmproxy
+            # 始终停止 mitmproxy
             self._stop_mitmproxy()

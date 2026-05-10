@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Command-line interface for agentob
+agentob 命令行界面
 """
 import sys
 import argparse
@@ -8,35 +8,35 @@ from .wrapper import AgentWrapper
 
 
 def main():
-    """Main entry point for agentob CLI"""
+    """agentob CLI 主入口"""
     parser = argparse.ArgumentParser(
-        description="Agent execution observation tool",
-        usage="agentob [options] -- <command> [args...]"
+        description="Agent 执行观测工具",
+        usage="agentob [选项] -- <命令> [参数...]"
     )
 
     parser.add_argument(
         "-o", "--output",
         default=".agentob",
-        help="Output directory for mitm files and analysis results (default: .agentob)"
+        help="mitm 文件和分析结果的输出目录（默认: .agentob）"
     )
 
     parser.add_argument(
         "-p", "--port",
         type=int,
         default=8080,
-        help="Proxy port (default: 8080)"
+        help="代理端口（默认: 8080）"
     )
 
     parser.add_argument(
         "--no-analysis",
         action="store_true",
-        help="Skip automatic analysis after agent execution"
+        help="跳过 agent 执行后的自动分析"
     )
 
-    # Parse known args to handle the -- separator
+    # 解析已知参数以处理 -- 分隔符
     args, remaining = parser.parse_known_args()
 
-    # Find the -- separator
+    # 查找 -- 分隔符
     if "--" in sys.argv:
         separator_idx = sys.argv.index("--")
         target_command = sys.argv[separator_idx + 1:]
@@ -44,7 +44,7 @@ def main():
         target_command = remaining
     else:
         parser.print_help()
-        print("\nError: No target command specified")
+        print("\n错误：未指定目标命令")
         print("\nExamples:")
         print("  agentob -- claude")
         print("  agentob -- python script.py")
@@ -52,10 +52,10 @@ def main():
         return 1
 
     if not target_command:
-        print("Error: No command specified after '--'")
+        print("错误：'--' 之后未指定命令")
         return 1
 
-    # Create and run wrapper
+    # 创建并运行 wrapper
     wrapper = AgentWrapper(
         output_dir=args.output,
         proxy_port=args.port,

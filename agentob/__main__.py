@@ -1,5 +1,5 @@
 """
-Entry point for python -m agentob
+python -m agentob 的入口点
 """
 from .cli import main
 
