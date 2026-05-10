@@ -436,6 +436,39 @@ class AgentVisualizer:
             line-height: 1.5;
         }}
 
+        /* Overall analysis panel (top of conversation) */
+        .overall-analysis-panel {{
+            background: var(--color-surface-raised);
+            border: 1px solid var(--color-border);
+            border-radius: 0.75rem;
+            padding: 1.5rem;
+            margin-bottom: 2rem;
+        }}
+
+        .overall-analysis-title {{
+            font-size: 1.125rem;
+            font-weight: 600;
+            color: var(--color-accent);
+            margin-bottom: 1rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 1px solid var(--color-border);
+        }}
+
+        .overall-analysis-subtitle {{
+            font-size: 0.875rem;
+            font-weight: 600;
+            color: var(--color-text);
+            margin-top: 1rem;
+            margin-bottom: 0.5rem;
+        }}
+
+        .overall-analysis-text {{
+            color: var(--color-text-secondary);
+            font-size: 0.875rem;
+            line-height: 1.7;
+            white-space: pre-wrap;
+        }}
+
         /* Analysis box */
         .analysis-box {{
             background: linear-gradient(135deg, rgba(59, 130, 246, 0.1), rgba(37, 99, 235, 0.05));
@@ -527,7 +560,6 @@ class AgentVisualizer:
             </div>
         </div>
 
-        {self._generate_sidebar_analysis()}
         {self._generate_sidebar_tools()}
         {self._generate_sidebar_prompts()}
     </div>
@@ -561,28 +593,6 @@ class AgentVisualizer:
 </html>"""
 
         return html
-
-    def _generate_sidebar_analysis(self) -> str:
-        """生成侧边栏分析部分。"""
-        if not self.analysis:
-            return ""
-
-        overall = self.analysis.get("overall_analysis", "")
-        if not overall:
-            return ""
-
-        # 如果太长则截断
-        display_text = overall[:300] + ("..." if len(overall) > 300 else "")
-
-        return f'''<div class="sidebar-section">
-            <div class="sidebar-section-header">
-                <span>📊 整体分析</span>
-                <span class="toggle-icon">▶</span>
-            </div>
-            <div class="sidebar-section-content">
-                <div class="sidebar-section-body">{self._escape_html(display_text)}</div>
-            </div>
-        </div>'''
 
     def _generate_sidebar_tools(self) -> str:
         """生成侧边栏工具部分。"""
@@ -645,16 +655,46 @@ class AgentVisualizer:
             return '<div style="text-align: center; padding: 3rem; color: var(--color-text-muted);">无调用轨迹</div>'
 
         messages_html = ''
+
+        # 整体分析面板（置于对话最上方）
+        if self.analysis:
+            overall = self.analysis.get("overall_analysis", "")
+            system_prompt_analysis = self.analysis.get("system_prompt_analysis", "")
+            tools_analysis = self.analysis.get("tools_analysis", "")
+            if overall or system_prompt_analysis or tools_analysis:
+                messages_html += '<div class="overall-analysis-panel">'
+                messages_html += '<div class="overall-analysis-title">📊 整体分析报告</div>'
+                if overall:
+                    messages_html += f'<div class="overall-analysis-text">{self._escape_html(overall)}</div>'
+                if system_prompt_analysis:
+                    messages_html += '<div class="overall-analysis-subtitle">📝 系统提示词分析</div>'
+                    messages_html += f'<div class="overall-analysis-text">{self._escape_html(system_prompt_analysis)}</div>'
+                if tools_analysis:
+                    messages_html += '<div class="overall-analysis-subtitle">🛠️ 工具分析</div>'
+                    messages_html += f'<div class="overall-analysis-text">{self._escape_html(tools_analysis)}</div>'
+                messages_html += '</div>'
+
         call_analyses = self.analysis.get("call_analyses", []) if self.analysis else []
-        item_index = 0
 
+        # 构建展开后的列表（与 analyzer 展开逻辑一致，确保索引对齐）
+        expanded_items = []
         for call in self.call_trace:
-            info_list = call.get("information_list", [])
-
-            for item in info_list:
+            for item in call.get("information_list", []):
+                content = item.get("content")
                 item_type = item.get("type", "unknown")
-                messages_html += self._generate_message(item, item_type, call_analyses, item_index)
-                item_index += 1
+                if isinstance(content, list) and item_type == "user_message":
+                    for sub in content:
+                        if isinstance(sub, dict) and "text" in sub:
+                            expanded = dict(item)
+                            expanded["content"] = sub["text"]
+                            expanded["_parent_content"] = content
+                            expanded_items.append(expanded)
+                else:
+                    expanded_items.append(item)
+
+        for item_index, item in enumerate(expanded_items):
+            item_type = item.get("type", "unknown")
+            messages_html += self._generate_message(item, item_type, call_analyses, item_index)
 
         return messages_html
 

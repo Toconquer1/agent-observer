@@ -74,6 +74,14 @@ class AgentAnalyzer:
             else:
                 return []
 
+    @staticmethod
+    def _extract_text_from_response(response) -> str:
+        """Extract text from API response, handling both TextBlock and ThinkingBlock."""
+        for block in response.content:
+            if hasattr(block, "text"):
+                return block.text
+        return ""
+
     def _load_call_trace(self) -> List[Dict[str, Any]]:
         """从 call_trace.json 加载调用轨迹。"""
         trace_file = self.analyzed_dir / "call_trace.json"
@@ -104,7 +112,7 @@ class AgentAnalyzer:
                 max_tokens=1024,
                 messages=[{"role": "user", "content": prompt}]
             )
-            return response.content[0].text
+            return self._extract_text_from_response(response)
         except Exception as e:
             print(f"Error analyzing system prompt: {e}")
             return ""
@@ -139,36 +147,43 @@ class AgentAnalyzer:
                 max_tokens=512,
                 messages=[{"role": "user", "content": prompt}]
             )
-            return response.content[0].text
+            return self._extract_text_from_response(response)
         except Exception as e:
             print(f"Error analyzing tools: {e}")
             return ""
 
     def _get_context_items(self, current_index: int, all_items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """获取当前项及最多前 5 个项作为上下文。"""
-        # 在扁平化列表中查找当前项的位置
+        # 在扁平化列表中查找当前项的位置（需与 analyze() 中的展开逻辑一致）
         flat_items = []
         for call in self.call_trace:
             for item in call.get("information_list", []):
-                flat_items.append({
-                    "call_index": call.get("index"),
-                    "model": call.get("model"),
-                    **item
-                })
+                content = item.get("content")
+                if isinstance(content, list):
+                    for sub in content:
+                        if isinstance(sub, dict) and "text" in sub:
+                            expanded = {
+                                "call_index": call.get("index"),
+                                "model": call.get("model"),
+                                **item,
+                            }
+                            expanded["content"] = sub["text"]
+                            expanded["_parent_content"] = content
+                            flat_items.append(expanded)
+                else:
+                    flat_items.append({
+                        "call_index": call.get("index"),
+                        "model": call.get("model"),
+                        **item
+                    })
 
-        # 查找当前项位置
-        current_pos = -1
-        for i, item in enumerate(flat_items):
-            if item == all_items[current_index]:
-                current_pos = i
-                break
-
-        if current_pos == -1:
+        # flat_items 与 all_items 展开方式一致，索引直接对应
+        if current_index >= len(flat_items):
             return [all_items[current_index]]
 
         # 取最多 5 个前序项 + 当前项
-        start = max(0, current_pos - 5)
-        return flat_items[start:current_pos + 1]
+        start = max(0, current_index - 5)
+        return flat_items[start:current_index + 1]
 
     def _analyze_single_item(self, item: Dict[str, Any], context: List[Dict[str, Any]],
                             previous_analysis: List[Dict[str, Any]]) -> Dict[str, str]:
@@ -185,7 +200,12 @@ class AgentAnalyzer:
         for ctx_item in context[:-1]:  # 排除当前项
             ctx_type = ctx_item.get("type", "unknown")
             if ctx_type == "user_message":
-                content = str(ctx_item.get("content", ""))[:200]
+                raw = ctx_item.get("content", "")
+                if isinstance(raw, list):
+                    parts = [c.get("text", "") for c in raw if isinstance(c, dict) and c.get("type") == "text"]
+                    content = (" | ".join(parts))[:200]
+                else:
+                    content = str(raw)[:200]
                 context_text += f"- 用户消息: {content}...\n"
             elif ctx_type == "tool_calls":
                 calls = ctx_item.get("calls", [])
@@ -195,6 +215,9 @@ class AgentAnalyzer:
             elif ctx_type == "assistant_text":
                 text = ctx_item.get("content", "")[:100]
                 context_text += f"- 助手回复: {text}...\n"
+            elif ctx_type == "assistant_thinking":
+                text = ctx_item.get("content", "")[:100]
+                context_text += f"- 模型思考: {text}...\n"
 
         # 构建前序分析摘要
         prev_summary = ""
@@ -205,7 +228,11 @@ class AgentAnalyzer:
 
         # 根据项类型创建分析提示词
         if item_type == "user_message":
-            content = json.dumps(item.get("content", []), ensure_ascii=False, indent=2)[:1000]
+            raw_content = item.get("content", "")
+            if isinstance(raw_content, list):
+                content = json.dumps(raw_content, ensure_ascii=False, indent=2)[:1000]
+            else:
+                content = str(raw_content)[:1000]
             prompt = f"""{context_text}
 
 {prev_summary}
@@ -277,6 +304,24 @@ class AgentAnalyzer:
 {{"summary": "摘要", "analysis": "详细分析", "score": 分数}}
 """
 
+        elif item_type == "assistant_thinking":
+            text = item.get("content", "")[:500]
+            prompt = f"""{context_text}
+
+{prev_summary}
+
+当前项（模型思考）：
+{text}
+
+请分析：
+1. 模型思考的主要内容（一句话）
+2. 思考的逻辑和方向是否合理（2-3句话）
+3. 评分（1-5分）
+
+请以JSON格式返回：
+{{"summary": "摘要", "analysis": "详细分析", "score": 分数}}
+"""
+
         else:
             # 未知类型
             return {
@@ -293,7 +338,7 @@ class AgentAnalyzer:
             )
 
             # 解析 JSON 响应
-            result_text = response.content[0].text
+            result_text = self._extract_text_from_response(response)
             # 尝试从响应中提取 JSON
             if "{" in result_text and "}" in result_text:
                 start = result_text.index("{")
@@ -338,7 +383,7 @@ class AgentAnalyzer:
                 max_tokens=2048,
                 messages=[{"role": "user", "content": prompt}]
             )
-            return response.content[0].text
+            return self._extract_text_from_response(response)
         except Exception as e:
             print(f"Error generating overall analysis: {e}")
             return ""
@@ -371,7 +416,17 @@ class AgentAnalyzer:
             all_items = []
             for call in self.call_trace:
                 for item in call.get("information_list", []):
-                    all_items.append(item)
+                    content = item.get("content")
+                    if isinstance(content, list):
+                        # Expand list content into individual sub-items
+                        for sub in content:
+                            if isinstance(sub, dict) and "text" in sub:
+                                expanded = dict(item)
+                                expanded["content"] = sub["text"]
+                                expanded["_parent_content"] = content
+                                all_items.append(expanded)
+                    else:
+                        all_items.append(item)
 
             item_analyses = []
             for i, item in enumerate(all_items):
