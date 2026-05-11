@@ -58,13 +58,12 @@ class MitmDecoder:
                         delta_type = delta.get("type", "")
 
                         if delta_type == "thinking_delta":
-                            combined_thinking += delta.get("thinking", "")
+                            combined_thinking += delta.get("thinking") or ""
                         elif delta_type == "text_delta":
-                            combined_text += delta.get("text", "")
+                            combined_text += delta.get("text") or ""
                         elif delta_type == "input_json_delta":
                             if index in tool_calls:
-                                # 拼接碎片化的工具调用 JSON 参数
-                                tool_calls[index]["arguments"] += delta.get("partial_json", "")
+                                tool_calls[index]["arguments"] += delta.get("partial_json") or ""
 
                     # 3. 拦截 message_delta（捕获停止原因和 token 用量）
                     elif event_type == "message_delta":
@@ -78,9 +77,9 @@ class MitmDecoder:
                     elif "choices" in data_json and len(data_json["choices"]) > 0:
                         delta = data_json["choices"][0].get("delta", {})
                         if "content" in delta:
-                            combined_text += delta.get("content", "")
+                            combined_text += delta.get("content") or ""
                         if "reasoning_content" in delta:
-                            combined_thinking += delta.get("reasoning_content", "")
+                            combined_thinking += delta.get("reasoning_content") or ""
 
                 except json.JSONDecodeError:
                     pass
