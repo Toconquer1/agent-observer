@@ -154,18 +154,45 @@ class RequestSimplifier:
                             item["text"] = self._get_simplified_text(item["text"])
                             modified = True
 
+        # 2b. 从 OpenAI 格式的 messages 中提取 system 角色消息
+        if "messages" in req_body and isinstance(req_body["messages"], list):
+            for msg in req_body["messages"]:
+                if isinstance(msg, dict) and msg.get("role") == "system":
+                    content = msg.get("content", "")
+                    if isinstance(content, str) and len(content) > 50:
+                        msg["content"] = self._get_simplified_text(content)
+                        modified = True
+
         # 3. 提取并简化 tools
         if "tools" in req_body and isinstance(req_body["tools"], list):
             simplified_tools = []
             for tool in req_body["tools"]:
-                if isinstance(tool, dict) and "name" in tool:
-                    tool_name = tool["name"]
-                    self.all_extracted_tools[tool_name] = tool
-                    simplified_tools.append({
-                        "name": tool_name,
-                        "extracted": True
-                    })
-                    modified = True
+                if isinstance(tool, dict):
+                    # Anthropic 格式: {"name": "Bash", "description": "..."}
+                    if "name" in tool:
+                        tool_name = tool["name"]
+                        self.all_extracted_tools[tool_name] = tool
+                        simplified_tools.append({
+                            "name": tool_name,
+                            "extracted": True
+                        })
+                        modified = True
+                    # OpenAI 格式: {"type": "function", "function": {"name": "bash", ...}}
+                    elif "function" in tool:
+                        func = tool.get("function", {})
+                        if isinstance(func, dict) and "name" in func:
+                            tool_name = func["name"]
+                            self.all_extracted_tools[tool_name] = func
+                            simplified_tools.append({
+                                "type": "function",
+                                "name": tool_name,
+                                "extracted": True
+                            })
+                            modified = True
+                        else:
+                            simplified_tools.append(tool)
+                    else:
+                        simplified_tools.append(tool)
                 else:
                     simplified_tools.append(tool)
             req_body["tools"] = simplified_tools

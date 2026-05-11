@@ -75,11 +75,45 @@ class MitmDecoder:
 
                     # --- OpenAI 格式兼容的回退逻辑 ---
                     elif "choices" in data_json and len(data_json["choices"]) > 0:
-                        delta = data_json["choices"][0].get("delta", {})
+                        choice = data_json["choices"][0]
+                        delta = choice.get("delta", {})
+
+                        # 文本和思考
                         if "content" in delta:
                             combined_text += delta.get("content") or ""
                         if "reasoning_content" in delta:
                             combined_thinking += delta.get("reasoning_content") or ""
+
+                        # 工具调用
+                        if "tool_calls" in delta:
+                            for tc_delta in delta["tool_calls"]:
+                                tc_index = tc_delta.get("index", 0)
+                                if tc_index not in tool_calls:
+                                    tool_calls[tc_index] = {
+                                        "id": tc_delta.get("id", ""),
+                                        "name": "",
+                                        "arguments": ""
+                                    }
+                                func = tc_delta.get("function", {})
+                                if func.get("name"):
+                                    tool_calls[tc_index]["name"] = func["name"]
+                                if func.get("arguments"):
+                                    tool_calls[tc_index]["arguments"] += func["arguments"]
+
+                        # 停止原因
+                        finish_reason = choice.get("finish_reason")
+                        if finish_reason:
+                            # OpenAI: "tool_calls" → "tool_use", "stop" → "end_turn"
+                            stop_reason_map = {
+                                "tool_calls": "tool_use",
+                                "stop": "end_turn",
+                                "length": "max_tokens",
+                            }
+                            stop_reason = stop_reason_map.get(finish_reason, finish_reason)
+
+                    # OpenAI 格式的顶层 usage（独立于 choices 的最后一块）
+                    if "usage" in data_json and not data_json.get("choices"):
+                        usage = data_json["usage"]
 
                 except json.JSONDecodeError:
                     pass
