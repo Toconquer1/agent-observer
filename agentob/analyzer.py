@@ -15,6 +15,9 @@ from dotenv import load_dotenv
 # 加载 .env 文件（如果存在）
 load_dotenv()
 
+# 提示词模板目录
+PROMPTS_DIR = Path(__file__).parent / "prompts"
+
 
 class AgentAnalyzer:
     """使用 LLM 分析 agent 执行轨迹。"""
@@ -49,6 +52,9 @@ class AgentAnalyzer:
         self.prompts = self._load_prompts()
         self.tools = self._load_tools()
         self.call_trace = self._load_call_trace()
+
+        # 加载提示词模板
+        self.prompt_templates = self._load_prompt_templates()
 
     def _load_prompts(self) -> str:
         """从 prompts.txt 加载系统提示词。"""
@@ -89,6 +95,27 @@ class AgentAnalyzer:
             return []
         with open(trace_file, "r", encoding="utf-8") as f:
             return json.load(f)
+
+    def _load_prompt_templates(self) -> Dict[str, str]:
+        """加载所有提示词模板。"""
+        templates = {}
+        template_files = {
+            "user_message": "user_message_prompt.txt",
+            "tool_calls": "tool_calls_prompt.txt",
+            "tool_result": "tool_result_prompt.txt",
+            "assistant_text": "assistant_text_prompt.txt",
+            "assistant_thinking": "assistant_thinking_prompt.txt"
+        }
+
+        for key, filename in template_files.items():
+            template_path = PROMPTS_DIR / filename
+            if template_path.exists():
+                templates[key] = template_path.read_text(encoding="utf-8")
+            else:
+                print(f"Warning: Template file not found: {template_path}")
+                templates[key] = ""
+
+        return templates
 
     def _analyze_system_prompt(self) -> str:
         """分析系统提示词，理解 agent 的工作模式。"""
@@ -152,212 +179,236 @@ class AgentAnalyzer:
             print(f"Error analyzing tools: {e}")
             return ""
 
-    def _get_context_items(self, current_index: int, all_items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """获取当前项及最多前 5 个项作为上下文。"""
-        # 在扁平化列表中查找当前项的位置（需与 analyze() 中的展开逻辑一致）
-        flat_items = []
-        for call in self.call_trace:
-            for item in call.get("information_list", []):
-                content = item.get("content")
-                if isinstance(content, list):
-                    for sub in content:
-                        if isinstance(sub, dict) and "text" in sub:
-                            expanded = {
-                                "call_index": call.get("index"),
-                                "model": call.get("model"),
-                                **item,
-                            }
-                            expanded["content"] = sub["text"]
-                            expanded["_parent_content"] = content
-                            flat_items.append(expanded)
-                else:
-                    flat_items.append({
-                        "call_index": call.get("index"),
-                        "model": call.get("model"),
-                        **item
-                    })
+    def _build_context_for_analysis(self, current_index: int, all_items: List[Dict[str, Any]],
+                                    previous_analyses: List[Dict[str, Any]]) -> tuple[str, str]:
+        """
+        构建分析上下文，实现滑动窗口：
+        - 历史项（超过3项之前的）：只保留摘要
+        - 近期项（最近3项）：保留完整原始内容
 
-        # flat_items 与 all_items 展开方式一致，索引直接对应
-        if current_index >= len(flat_items):
-            return [all_items[current_index]]
+        Returns:
+            (history_summaries, recent_items) 两个字符串
+        """
+        # 历史项摘要（当前项之前超过3项的所有项）
+        history_summaries = ""
+        if current_index > 3:
+            history_summaries = "以下是更早的历史项摘要：\n"
+            for i in range(0, current_index - 3):
+                if i < len(previous_analyses):
+                    summary = previous_analyses[i].get("summary", "无摘要")
+                    history_summaries += f"{i+1}. {summary}\n"
 
-        # 取最多 5 个前序项 + 当前项
-        start = max(0, current_index - 5)
-        return flat_items[start:current_index + 1]
+        # 近期项详情（最近3项的原始内容）
+        recent_items = ""
+        start_index = max(0, current_index - 3)
+        if start_index < current_index:
+            recent_items = "以下是最近3项的详细内容：\n\n"
+            for i in range(start_index, current_index):
+                if i < len(all_items):
+                    item = all_items[i]
+                    item_type = item.get("type", "unknown")
+                    recent_items += f"### 项 {i+1} - {item_type}\n"
 
-    def _analyze_single_item(self, item: Dict[str, Any], context: List[Dict[str, Any]],
-                            previous_analysis: List[Dict[str, Any]]) -> Dict[str, str]:
+                    if item_type == "user_message":
+                        content = item.get("content", "")
+                        if isinstance(content, list):
+                            content = json.dumps(content, ensure_ascii=False, indent=2)[:800]
+                        else:
+                            content = str(content)[:800]
+                        recent_items += f"```\n{content}\n```\n\n"
+
+                    elif item_type == "tool_calls":
+                        calls = item.get("calls", [])
+                        recent_items += f"```json\n{json.dumps(calls, ensure_ascii=False, indent=2)[:800]}\n```\n\n"
+
+                    elif item_type == "tool_result":
+                        content = str(item.get("content", ""))[:500]
+                        recent_items += f"```\n{content}\n```\n\n"
+
+                    elif item_type == "assistant_text":
+                        text = item.get("content", "")[:500]
+                        recent_items += f"```\n{text}\n```\n\n"
+
+                    elif item_type == "assistant_thinking":
+                        text = item.get("content", "")[:500]
+                        recent_items += f"```\n{text}\n```\n\n"
+
+        return history_summaries, recent_items
+
+    def _analyze_single_item(self, item: Dict[str, Any], current_index: int,
+                            all_items: List[Dict[str, Any]],
+                            previous_analyses: List[Dict[str, Any]]) -> Dict[str, Any]:
         """
         分析单个信息项。
 
         Returns:
-            包含 'summary' 和 'analysis' 键的字典
+            包含 'summary' 和 'error_analysis' 键的字典
         """
         item_type = item.get("type", "unknown")
 
-        # 构建上下文摘要
-        context_text = "前序上下文：\n"
-        for ctx_item in context[:-1]:  # 排除当前项
-            ctx_type = ctx_item.get("type", "unknown")
-            if ctx_type == "user_message":
-                raw = ctx_item.get("content", "")
-                if isinstance(raw, list):
-                    parts = [c.get("text", "") for c in raw if isinstance(c, dict) and c.get("type") == "text"]
-                    content = (" | ".join(parts))[:200]
-                else:
-                    content = str(raw)[:200]
-                context_text += f"- 用户消息: {content}...\n"
-            elif ctx_type == "tool_calls":
-                calls = ctx_item.get("calls", [])
-                context_text += f"- 工具调用: {len(calls)} 个工具\n"
-            elif ctx_type == "tool_result":
-                context_text += f"- 工具结果\n"
-            elif ctx_type == "assistant_text":
-                text = ctx_item.get("content", "")[:100]
-                context_text += f"- 助手回复: {text}...\n"
-            elif ctx_type == "assistant_thinking":
-                text = ctx_item.get("content", "")[:100]
-                context_text += f"- 模型思考: {text}...\n"
+        # 获取对应的提示词模板
+        template = self.prompt_templates.get(item_type, "")
+        if not template:
+            return {
+                "summary": f"未知类型: {item_type}",
+                "error_analysis": {
+                    "is_correct": False,
+                    "is_necessary": False,
+                    "reasoning": "无法分析此类型的项目",
+                    "flag": "error"
+                }
+            }
 
-        # 构建前序分析摘要
-        prev_summary = ""
-        if previous_analysis:
-            prev_summary = "之前的分析摘要：\n"
-            for prev in previous_analysis[-3:]:  # 最近 3 条分析
-                prev_summary += f"- {prev.get('summary', '')}...\n"
+        # 构建上下文
+        history_summaries, recent_items = self._build_context_for_analysis(
+            current_index, all_items, previous_analyses
+        )
 
-        # 根据项类型创建分析提示词
+        # 准备当前项内容
         if item_type == "user_message":
             raw_content = item.get("content", "")
             if isinstance(raw_content, list):
                 content = json.dumps(raw_content, ensure_ascii=False, indent=2)[:1000]
             else:
                 content = str(raw_content)[:1000]
-            prompt = f"""{context_text}
-
-{prev_summary}
-
-当前项（用户消息）：
-{content}
-
-请分析：
-1. 用户的意图和需求（一句话概括，作为摘要）
-2. 这个消息在整个调用流程中的作用和重要性（2-3句话）
-3. 评分（1-5分，5分表示非常重要的转折点或关键操作）
-
-请以JSON格式返回：
-{{"summary": "摘要", "analysis": "详细分析", "score": 分数}}
-"""
 
         elif item_type == "tool_calls":
             calls = item.get("calls", [])
-            calls_text = json.dumps(calls, ensure_ascii=False, indent=2)[:1000]
-            prompt = f"""{context_text}
-
-{prev_summary}
-
-当前项（工具调用）：
-{calls_text}
-
-请分析：
-1. 调用的工具和参数（保留原始参数，作为摘要）
-2. 调用意图和预期效果（2-3句话）
-3. 评分（1-5分，5分表示关键操作）
-
-请以JSON格式返回：
-{{"summary": "工具: {calls[0].get('name', 'unknown')} - 参数: ...", "analysis": "详细分析", "score": 分数}}
-"""
+            content = json.dumps(calls, ensure_ascii=False, indent=2)[:1000]
 
         elif item_type == "tool_result":
-            content = str(item.get("content", ""))[:500]
-            prompt = f"""{context_text}
-
-{prev_summary}
-
-当前项（工具结果）：
-{content}
-
-请分析：
-1. 工具执行结果概要（一句话）
-2. 结果的意义和对后续流程的影响（2-3句话）
-3. 评分（1-5分）
-
-请以JSON格式返回：
-{{"summary": "摘要", "analysis": "详细分析", "score": 分数}}
-"""
+            content = str(item.get("content", ""))[:800]
 
         elif item_type == "assistant_text":
-            text = item.get("content", "")[:500]
-            prompt = f"""{context_text}
-
-{prev_summary}
-
-当前项（助手回复）：
-{text}
-
-请分析：
-1. 助手回复的主要内容（一句话）
-2. 回复的质量和完整性（2-3句话）
-3. 评分（1-5分）
-
-请以JSON格式返回：
-{{"summary": "摘要", "analysis": "详细分析", "score": 分数}}
-"""
+            content = item.get("content", "")[:800]
 
         elif item_type == "assistant_thinking":
-            text = item.get("content", "")[:500]
-            prompt = f"""{context_text}
-
-{prev_summary}
-
-当前项（模型思考）：
-{text}
-
-请分析：
-1. 模型思考的主要内容（一句话）
-2. 思考的逻辑和方向是否合理（2-3句话）
-3. 评分（1-5分）
-
-请以JSON格式返回：
-{{"summary": "摘要", "analysis": "详细分析", "score": 分数}}
-"""
+            content = item.get("content", "")[:800]
 
         else:
-            # 未知类型
-            return {
-                "summary": f"未知类型: {item_type}",
-                "analysis": "无法分析此类型的项目",
-                "score": 0
-            }
+            content = str(item.get("content", ""))[:800]
 
-        try:
-            response = self.client.messages.create(
-                model=self.model,
-                max_tokens=512,
-                messages=[{"role": "user", "content": prompt}]
-            )
+        # 填充模板
+        prompt = template.format(
+            history_summaries=history_summaries if history_summaries else "（无历史项）",
+            recent_items=recent_items if recent_items else "（无近期项）",
+            content=content
+        )
 
-            # 解析 JSON 响应
-            result_text = self._extract_text_from_response(response)
-            # 尝试从响应中提取 JSON
-            if "{" in result_text and "}" in result_text:
-                start = result_text.index("{")
-                end = result_text.rindex("}") + 1
-                result = json.loads(result_text[start:end])
-                return result
-            else:
-                return {
-                    "summary": result_text[:100],
-                    "analysis": result_text,
-                    "score": 3
-                }
-        except Exception as e:
-            print(f"Error analyzing item: {e}")
-            return {
-                "summary": f"{item_type} 分析失败",
-                "analysis": f"分析过程中出现错误: {str(e)}",
-                "score": 0
+        # 重试最多 3 次
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                response = self.client.messages.create(
+                    model=self.model,
+                    max_tokens=1024,  # 增加 token 限制，避免截断
+                    messages=[{"role": "user", "content": prompt}]
+                )
+
+                # 解析 JSON 响应
+                result_text = self._extract_text_from_response(response)
+
+                # 尝试从响应中提取 JSON（支持 markdown 代码块）
+                json_text = result_text
+
+                # 如果包含 markdown 代码块，提取其中的内容
+                if "```json" in result_text:
+                    start = result_text.index("```json") + 7
+                    end = result_text.index("```", start)
+                    json_text = result_text[start:end].strip()
+                elif "```" in result_text:
+                    start = result_text.index("```") + 3
+                    end = result_text.index("```", start)
+                    json_text = result_text[start:end].strip()
+
+                # 尝试解析 JSON
+                try:
+                    # 找到第一个 { 和匹配的 }
+                    if "{" in json_text:
+                        start = json_text.index("{")
+                        # 使用括号匹配找到对应的右括号
+                        depth = 0
+                        end = -1
+                        for i in range(start, len(json_text)):
+                            if json_text[i] == "{":
+                                depth += 1
+                            elif json_text[i] == "}":
+                                depth -= 1
+                                if depth == 0:
+                                    end = i + 1
+                                    break
+
+                        if end > start:
+                            json_str = json_text[start:end]
+                            result = json.loads(json_str)
+
+                            # 验证必需字段
+                            if "summary" in result and "error_analysis" in result:
+                                error_analysis = result["error_analysis"]
+                                # 验证 error_analysis 的必需字段
+                                required_fields = ["is_correct", "is_necessary", "reasoning", "flag"]
+                                if all(field in error_analysis for field in required_fields):
+                                    # 解析成功，返回结果
+                                    if attempt > 0:
+                                        print(f"  ✓ 重试成功 (第 {attempt + 1} 次尝试)")
+                                    return result
+                                else:
+                                    raise ValueError(f"Missing required fields in error_analysis: {required_fields}")
+                            else:
+                                raise ValueError("Missing required fields (summary or error_analysis) in JSON response")
+                        else:
+                            raise ValueError("Could not find matching closing brace")
+                    else:
+                        raise ValueError("No JSON object found in response")
+
+                except (json.JSONDecodeError, ValueError) as e:
+                    if attempt < max_retries - 1:
+                        print(f"  ⚠ 解析失败 (第 {attempt + 1} 次尝试): {e}")
+                        print(f"  响应预览: {result_text[:150]}...")
+                        print(f"  正在重试...")
+                        continue  # 重试
+                    else:
+                        # 最后一次尝试也失败了
+                        print(f"  ✗ 解析失败 (已重试 {max_retries} 次): {e}")
+                        print(f"  响应文本: {result_text[:200]}...")
+                        return {
+                            "summary": f"{item_type} - 分析失败（响应格式错误）",
+                            "error_analysis": {
+                                "is_correct": False,
+                                "is_necessary": False,
+                                "reasoning": f"LLM 返回格式错误，已重试 {max_retries} 次。原始响应: {result_text[:200]}",
+                                "flag": "error"
+                            }
+                        }
+
+            except Exception as e:
+                if attempt < max_retries - 1:
+                    print(f"  ⚠ API 调用失败 (第 {attempt + 1} 次尝试): {e}")
+                    print(f"  正在重试...")
+                    continue  # 重试
+                else:
+                    # 最后一次尝试也失败了
+                    print(f"  ✗ API 调用失败 (已重试 {max_retries} 次): {e}")
+                    return {
+                        "summary": f"{item_type} - 分析失败（API 错误）",
+                        "error_analysis": {
+                            "is_correct": False,
+                            "is_necessary": False,
+                            "reasoning": f"API 调用失败，已重试 {max_retries} 次: {str(e)}",
+                            "flag": "error"
+                        }
+                    }
+
+        # 理论上不会到这里，但为了安全起见
+        return {
+            "summary": f"{item_type} - 分析失败",
+            "error_analysis": {
+                "is_correct": False,
+                "is_necessary": False,
+                "reasoning": "未知错误",
+                "flag": "error"
             }
+        }
 
     def _generate_overall_analysis(self, item_analyses: List[Dict[str, Any]]) -> str:
         """基于所有项的分析生成整体分析报告。"""
@@ -431,8 +482,7 @@ class AgentAnalyzer:
             item_analyses = []
             for i, item in enumerate(all_items):
                 print(f"  Analyzing item {i+1}/{len(all_items)}...")
-                context = self._get_context_items(i, all_items)
-                analysis = self._analyze_single_item(item, context, item_analyses)
+                analysis = self._analyze_single_item(item, i, all_items, item_analyses)
                 item_analyses.append(analysis)
 
             result["call_analyses"] = item_analyses

@@ -1,0 +1,40 @@
+## 上下文
+
+### 历史项摘要（仅保留大意）
+{history_summaries}
+
+### 近期项详情（最近3项原始内容）
+{recent_items}
+
+## 当前分析项
+
+**类型**: 工具结果
+
+**结果内容**:
+```
+{content}
+```
+
+## 分析要求
+
+请分析工具执行结果，并以JSON格式返回：
+
+```json
+{{
+  "summary": "工具结果的一句话概括",
+  "error_analysis": {{
+    "is_correct": true/false,
+    "is_necessary": true/false,
+    "reasoning": "说明：1) 结果是否符合预期 2) 是否包含错误信息 3) 结果对后续步骤的价值",
+    "flag": "error/unnecessary/ok"
+  }}
+}}
+```
+
+**评判标准**:
+- `is_correct`: 工具执行成功，结果符合预期
+- `is_necessary`: 结果包含有用信息，对任务推进有帮助
+- `flag`:
+  - "error" - 工具执行失败或返回错误
+  - "unnecessary" - 结果无用或未被后续使用
+  - "ok" - 结果正确且有价值

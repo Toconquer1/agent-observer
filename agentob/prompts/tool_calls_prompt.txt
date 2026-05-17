@@ -1,0 +1,40 @@
+## 上下文
+
+### 历史项摘要（仅保留大意）
+{history_summaries}
+
+### 近期项详情（最近3项原始内容）
+{recent_items}
+
+## 当前分析项
+
+**类型**: 工具调用
+
+**调用详情**:
+```json
+{content}
+```
+
+## 分析要求
+
+请分析当前工具调用，并以JSON格式返回结果：
+
+```json
+{{
+  "summary": "工具调用的一句话概括（包含工具名和关键参数）",
+  "error_analysis": {{
+    "is_correct": true/false,
+    "is_necessary": true/false,
+    "reasoning": "详细说明：1) 工具选择是否正确 2) 参数是否合理 3) 调用时机是否恰当 4) 是否对任务完成必要",
+    "flag": "error/unnecessary/ok"
+  }}
+}}
+```
+
+**评判标准**:
+- `is_correct`: 工具选择正确、参数合理、没有明显错误
+- `is_necessary`: 该工具调用对完成任务是必要的，不是重复或无效操作
+- `flag`:
+  - "error" - 工具选择错误、参数错误、或会导致失败
+  - "unnecessary" - 重复调用、无效操作、或可以省略
+  - "ok" - 工具调用正确且必要

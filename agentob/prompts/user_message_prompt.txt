@@ -1,0 +1,40 @@
+## 上下文
+
+### 历史项摘要（仅保留大意）
+{history_summaries}
+
+### 近期项详情（最近3项原始内容）
+{recent_items}
+
+## 当前分析项
+
+**类型**: 用户消息
+
+**内容**:
+```
+{content}
+```
+
+## 分析要求
+
+请分析当前用户消息，并以JSON格式返回结果：
+
+```json
+{{
+  "summary": "用户意图的一句话概括（用于后续上下文压缩）",
+  "error_analysis": {{
+    "is_correct": true/false,
+    "is_necessary": true/false,
+    "reasoning": "详细说明：1) 这个步骤是否正确（是否符合任务目标）2) 这个步骤是否必要（是否对任务完成有实际帮助）",
+    "flag": "error/unnecessary/ok"
+  }}
+}}
+```
+
+**评判标准**:
+- `is_correct`: 消息是否清晰、合理，是否有助于推进任务
+- `is_necessary`: 消息是否必要，还是重复、冗余或偏离主题
+- `flag`:
+  - "error" - 消息有明显错误或会导致错误方向
+  - "unnecessary" - 消息不必要或冗余
+  - "ok" - 消息正确且必要

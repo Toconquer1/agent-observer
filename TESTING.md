@@ -10,6 +10,7 @@ pip install -e .
 ```
 
 开发模式安装的特点：
+
 - 代码修改后立即生效，无需重新安装
 - 会在 Python 环境中注册 `agentob` 命令
 - 创建 `.egg-info` 目录
@@ -21,6 +22,7 @@ pip uninstall agentob
 ```
 
 卸载后：
+
 - `agentob` 命令将不可用
 - 但可以继续使用 `python -m agentob` 方式（如果在项目目录下）
 - 不会删除项目源代码
@@ -49,8 +51,11 @@ rm -rf test_output
 cd agent-observer
 pip uninstall agentob -y
 rm -rf agentob.egg-info agentob/__pycache__
+rmdir /s /q agentob.egg-info agentob\__pycache__
 pip install -e .
 ```
+
+python -m agentob --
 
 ## 测试 CLI 帮助信息
 
@@ -106,7 +111,8 @@ ls -la .agentob/
 ## 当前状态
 
 ### 已完成
-- ✅ 项目结构（pyproject.toml, __init__.py, __main__.py）
+
+- ✅ 项目结构（pyproject.toml, **init**.py, **main**.py）
 - ✅ CLI 接口（cli.py）
 - ✅ Wrapper 核心逻辑（wrapper.py）
   - mitmproxy 安装检查
@@ -128,9 +134,11 @@ ls -la .agentob/
 - ✅ 使用文档（README.md）
 
 ### 待测试
+
 - ⏳ 使用真实 mitm 文件测试解码功能
 - ⏳ 端到端测试完整流程
 
 ### 下一步（后续迭代）
+
 - 基于大模型的 agent 调用分析
 - 结果可视化

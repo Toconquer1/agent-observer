@@ -478,6 +478,18 @@ class AgentVisualizer:
             margin-top: 0.75rem;
         }}
 
+        .analysis-box.error {{
+            background: linear-gradient(135deg, rgba(239, 68, 68, 0.15), rgba(220, 38, 38, 0.08));
+            border: 2px solid rgba(239, 68, 68, 0.5);
+            box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1);
+        }}
+
+        .analysis-box.unnecessary {{
+            background: linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(217, 119, 6, 0.08));
+            border: 2px solid rgba(245, 158, 11, 0.5);
+            box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.1);
+        }}
+
         .analysis-header {{
             display: flex;
             align-items: center;
@@ -491,13 +503,40 @@ class AgentVisualizer:
             font-size: 0.875rem;
         }}
 
-        .analysis-score {{
+        .analysis-box.error .analysis-title {{
+            color: #dc2626;
+        }}
+
+        .analysis-box.unnecessary .analysis-title {{
+            color: #d97706;
+        }}
+
+        .analysis-flag {{
             padding: 0.25rem 0.5rem;
             border-radius: 0.25rem;
             font-size: 0.75rem;
             font-weight: 600;
-            background: rgba(59, 130, 246, 0.2);
-            color: var(--color-accent);
+            display: flex;
+            align-items: center;
+            gap: 0.25rem;
+        }}
+
+        .analysis-flag.ok {{
+            background: rgba(16, 185, 129, 0.2);
+            color: #059669;
+            border: 1px solid rgba(16, 185, 129, 0.4);
+        }}
+
+        .analysis-flag.error {{
+            background: rgba(239, 68, 68, 0.2);
+            color: #dc2626;
+            border: 1px solid rgba(239, 68, 68, 0.4);
+        }}
+
+        .analysis-flag.unnecessary {{
+            background: rgba(245, 158, 11, 0.2);
+            color: #d97706;
+            border: 1px solid rgba(245, 158, 11, 0.4);
         }}
 
         .analysis-summary {{
@@ -511,6 +550,39 @@ class AgentVisualizer:
             color: var(--color-text-secondary);
             font-size: 0.8125rem;
             line-height: 1.6;
+        }}
+
+        .analysis-details {{
+            margin-top: 0.5rem;
+            padding-top: 0.5rem;
+            border-top: 1px solid var(--color-border);
+        }}
+
+        .analysis-detail-item {{
+            display: flex;
+            align-items: flex-start;
+            gap: 0.5rem;
+            margin-bottom: 0.5rem;
+            font-size: 0.8125rem;
+        }}
+
+        .analysis-detail-label {{
+            font-weight: 600;
+            color: var(--color-text);
+            min-width: 80px;
+        }}
+
+        .analysis-detail-value {{
+            color: var(--color-text-secondary);
+            flex: 1;
+        }}
+
+        .analysis-detail-value.true {{
+            color: #059669;
+        }}
+
+        .analysis-detail-value.false {{
+            color: #dc2626;
         }}
 
         /* Scrollbar */
@@ -802,19 +874,66 @@ class AgentVisualizer:
         # 如果有分析结果则添加分析框
         if analysis:
             summary = analysis.get("summary", "")
-            analysis_text = analysis.get("analysis", "")
-            score = analysis.get("score", 0)
+            error_analysis = analysis.get("error_analysis", {})
 
-            if summary or analysis_text:
-                html += '<div class="analysis-box">'
+            if summary or error_analysis:
+                # 获取标记类型
+                flag = error_analysis.get("flag", "ok")
+                is_correct = error_analysis.get("is_correct", True)
+                is_necessary = error_analysis.get("is_necessary", True)
+                reasoning = error_analysis.get("reasoning", "")
+
+                # 根据标记类型设置样式
+                box_class = f"analysis-box {flag}"
+
+                # 设置图标和标题
+                if flag == "error":
+                    icon = "❌"
+                    title = "错误分析"
+                elif flag == "unnecessary":
+                    icon = "⚠️"
+                    title = "冗余分析"
+                else:
+                    icon = "✅"
+                    title = "分析结果"
+
+                html += f'<div class="{box_class}">'
                 html += '<div class="analysis-header">'
-                html += '<span class="analysis-title">💡 AI 分析</span>'
-                html += f'<span class="analysis-score">{score}/5</span>'
+                html += f'<span class="analysis-title">{icon} {title}</span>'
+                html += f'<span class="analysis-flag {flag}">'
+                if flag == "error":
+                    html += '🚫 有错误'
+                elif flag == "unnecessary":
+                    html += '⚠️ 不必要'
+                else:
+                    html += '✓ 正常'
+                html += '</span>'
                 html += '</div>'
+
+                # 内容大意
                 if summary:
-                    html += f'<div class="analysis-summary">{self._escape_html(summary)}</div>'
-                if analysis_text:
-                    html += f'<div class="analysis-text">{self._escape_html(analysis_text)}</div>'
+                    html += f'<div class="analysis-summary">📝 {self._escape_html(summary)}</div>'
+
+                # 详细分析
+                if reasoning:
+                    html += f'<div class="analysis-text">{self._escape_html(reasoning)}</div>'
+
+                # 详细信息
+                html += '<div class="analysis-details">'
+                html += '<div class="analysis-detail-item">'
+                html += '<span class="analysis-detail-label">是否正确:</span>'
+                correct_class = "true" if is_correct else "false"
+                correct_text = "✓ 是" if is_correct else "✗ 否"
+                html += f'<span class="analysis-detail-value {correct_class}">{correct_text}</span>'
+                html += '</div>'
+                html += '<div class="analysis-detail-item">'
+                html += '<span class="analysis-detail-label">是否必要:</span>'
+                necessary_class = "true" if is_necessary else "false"
+                necessary_text = "✓ 是" if is_necessary else "✗ 否"
+                html += f'<span class="analysis-detail-value {necessary_class}">{necessary_text}</span>'
+                html += '</div>'
+                html += '</div>'
+
                 html += '</div>'
 
         html += '</div></div>'

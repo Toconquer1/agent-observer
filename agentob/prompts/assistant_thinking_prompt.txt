@@ -1,0 +1,40 @@
+## 上下文
+
+### 历史项摘要（仅保留大意）
+{history_summaries}
+
+### 近期项详情（最近3项原始内容）
+{recent_items}
+
+## 当前分析项
+
+**类型**: 模型思考
+
+**思考内容**:
+```
+{content}
+```
+
+## 分析要求
+
+请分析模型思考过程，并以JSON格式返回：
+
+```json
+{{
+  "summary": "思考内容的一句话概括",
+  "error_analysis": {{
+    "is_correct": true/false,
+    "is_necessary": true/false,
+    "reasoning": "说明：1) 思考逻辑是否合理 2) 是否正确理解了任务 3) 推理方向是否正确 4) 是否有助于任务完成",
+    "flag": "error/unnecessary/ok"
+  }}
+}}
+```
+
+**评判标准**:
+- `is_correct`: 思考逻辑合理、理解正确、推理方向对
+- `is_necessary`: 思考有助于任务推进，不是无效的循环思考
+- `flag`:
+  - "error" - 思考方向错误、理解有误、逻辑混乱
+  - "unnecessary" - 过度思考、重复思考、或对任务无帮助
+  - "ok" - 思考合理且有助于任务

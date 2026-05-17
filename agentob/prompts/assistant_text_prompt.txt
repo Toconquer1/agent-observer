@@ -1,0 +1,40 @@
+## 上下文
+
+### 历史项摘要（仅保留大意）
+{history_summaries}
+
+### 近期项详情（最近3项原始内容）
+{recent_items}
+
+## 当前分析项
+
+**类型**: 助手回复
+
+**回复内容**:
+```
+{content}
+```
+
+## 分析要求
+
+请分析助手回复，并以JSON格式返回：
+
+```json
+{{
+  "summary": "回复内容的一句话概括",
+  "error_analysis": {{
+    "is_correct": true/false,
+    "is_necessary": true/false,
+    "reasoning": "说明：1) 回复是否准确 2) 是否回答了用户问题 3) 是否包含错误信息 4) 是否冗余",
+    "flag": "error/unnecessary/ok"
+  }}
+}}
+```
+
+**评判标准**:
+- `is_correct`: 回复准确、逻辑清晰、没有错误信息
+- `is_necessary`: 回复有价值，不是重复或无意义的内容
+- `flag`:
+  - "error" - 回复包含错误信息或误导性内容
+  - "unnecessary" - 回复冗余、重复或无实际价值
+  - "ok" - 回复准确且有价值
