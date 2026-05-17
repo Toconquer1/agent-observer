@@ -8,6 +8,7 @@ import subprocess
 import signal
 import time
 import uuid
+from datetime import datetime
 from pathlib import Path
 from typing import List, Optional
 
@@ -21,8 +22,11 @@ class AgentWrapper:
         self.auto_analysis = auto_analysis
         self.mitm_process: Optional[subprocess.Popen] = None
 
-        # 生成会话 ID
-        self.session_id = uuid.uuid4().hex[:8]
+        # 生成会话 ID：时间戳（分钟级）+ 随机ID
+        # 格式：YYYYMMDD_HHMM_<8位随机ID>
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M")
+        random_id = uuid.uuid4().hex[:8]
+        self.session_id = f"{timestamp}_{random_id}"
         self.session_dir = self.output_dir / self.session_id
         self.mitm_flow_file = self.session_dir / "flows.mitm"
 
@@ -333,7 +337,7 @@ class AgentWrapper:
         print(f"[agentob] 保留了 {kept_count}/{total_count} 个 LLM 请求对，移除了 {removed_count} 个")
 
     def run(self, target_command: List[str]) -> int:
-        """主执行流程"""
+        """主执行流程（前台模式）"""
         # 启动 mitmproxy
         if not self._start_mitmproxy():
             print("[agentob] 代理启动失败，中止")
@@ -354,6 +358,93 @@ class AgentWrapper:
                 self._analyze_flows()
 
             return return_code
+
+        finally:
+            # 始终停止 mitmproxy
+            self._stop_mitmproxy()
+
+    def attach(self, duration: Optional[int] = None) -> int:
+        """
+        Attach 模式：启动代理并等待，用于观测已经在运行的后台 agent。
+
+        使用场景：
+        1. 先运行 agentob attach（或指定时长如 agentob attach 300）
+        2. 设置环境变量指向代理（HTTP_PROXY=http://127.0.0.1:8080）
+        3. 启动你的后台 agent（如 OpenClaw）
+        4. agent 运行期间，所有流量会被捕获
+        5. 按 Ctrl+C 或等待时长结束后，停止捕获并分析
+
+        Args:
+            duration: 可选的捕获时长（秒），None 表示无限期直到 Ctrl+C
+
+        Returns:
+            退出码
+        """
+        # 启动 mitmproxy
+        if not self._start_mitmproxy():
+            print("[agentob] 代理启动失败，中止")
+            return 1
+
+        try:
+            print()
+            print("=" * 60)
+            print("[agentob] Attach 模式已启动")
+            print(f"[agentob] 会话 ID: {self.session_id}")
+            print(f"[agentob] 代理地址: http://127.0.0.1:{self.proxy_port}")
+            print()
+            print("[agentob] 请在你的 agent 应用中设置以下环境变量：")
+            print(f"[agentob]   export HTTP_PROXY=http://127.0.0.1:{self.proxy_port}")
+            print(f"[agentob]   export HTTPS_PROXY=http://127.0.0.1:{self.proxy_port}")
+            print()
+
+            # 获取证书路径
+            home = Path.home()
+            mitm_cert = home / ".mitmproxy" / "mitmproxy-ca-cert.pem"
+            if mitm_cert.exists():
+                print("[agentob] 对于 Node.js 应用，还需要：")
+                print(f"[agentob]   export NODE_EXTRA_CA_CERTS={mitm_cert}")
+                print()
+                print("[agentob] 对于 Python 应用，还需要：")
+                print(f"[agentob]   export REQUESTS_CA_BUNDLE={mitm_cert}")
+                print(f"[agentob]   export SSL_CERT_FILE={mitm_cert}")
+                print()
+            else:
+                print("[agentob] 警告：未找到 mitmproxy 证书")
+                print("[agentob] 对于 Node.js 应用，可能需要：")
+                print("[agentob]   export NODE_TLS_REJECT_UNAUTHORIZED=0")
+                print()
+
+            if duration:
+                print(f"[agentob] 将捕获 {duration} 秒，或按 Ctrl+C 提前结束")
+            else:
+                print("[agentob] 按 Ctrl+C 停止捕获")
+
+            print("=" * 60)
+            print()
+
+            # 等待指定时长或 Ctrl+C
+            if duration:
+                try:
+                    time.sleep(duration)
+                    print()
+                    print(f"[agentob] 捕获时长 {duration} 秒已到，正在停止...")
+                except KeyboardInterrupt:
+                    print()
+                    print("[agentob] 收到 Ctrl+C，正在停止...")
+            else:
+                try:
+                    # 无限等待直到 Ctrl+C
+                    while True:
+                        time.sleep(1)
+                except KeyboardInterrupt:
+                    print()
+                    print("[agentob] 收到 Ctrl+C，正在停止...")
+
+            # 如果启用，进行流量分析
+            if self.auto_analysis:
+                self._analyze_flows()
+
+            return 0
 
         finally:
             # 始终停止 mitmproxy

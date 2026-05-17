@@ -585,6 +585,89 @@ class AgentVisualizer:
             color: #dc2626;
         }}
 
+        /* Permission checks */
+        .permission-checks {{
+            margin-top: 0.75rem;
+            padding-top: 0.75rem;
+            border-top: 1px solid var(--color-border);
+        }}
+
+        .permission-checks-title {{
+            font-weight: 600;
+            color: var(--color-text);
+            margin-bottom: 0.5rem;
+            font-size: 0.875rem;
+        }}
+
+        .permission-check {{
+            background: var(--color-surface-overlay);
+            border: 1px solid var(--color-border);
+            border-radius: 0.375rem;
+            padding: 0.5rem;
+            margin-bottom: 0.5rem;
+        }}
+
+        .permission-check.unauthorized {{
+            background: rgba(239, 68, 68, 0.1);
+            border-color: rgba(239, 68, 68, 0.3);
+        }}
+
+        .permission-check-header {{
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.8125rem;
+        }}
+
+        .permission-icon {{
+            font-size: 1rem;
+        }}
+
+        .permission-level {{
+            font-weight: 600;
+            color: var(--color-text);
+            text-transform: capitalize;
+        }}
+
+        .risk-badge {{
+            padding: 0.125rem 0.375rem;
+            border-radius: 0.25rem;
+            font-size: 0.6875rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }}
+
+        .risk-badge.risk-low {{
+            background: rgba(16, 185, 129, 0.2);
+            color: #059669;
+        }}
+
+        .risk-badge.risk-medium {{
+            background: rgba(245, 158, 11, 0.2);
+            color: #d97706;
+        }}
+
+        .risk-badge.risk-high {{
+            background: rgba(239, 68, 68, 0.2);
+            color: #dc2626;
+        }}
+
+        .risk-badge.risk-critical {{
+            background: rgba(127, 29, 29, 0.3);
+            color: #991b1b;
+            font-weight: 700;
+        }}
+
+        .permission-violation {{
+            margin-top: 0.375rem;
+            padding: 0.375rem;
+            background: rgba(239, 68, 68, 0.05);
+            border-left: 2px solid #dc2626;
+            font-size: 0.75rem;
+            color: var(--color-text-secondary);
+            line-height: 1.4;
+        }}
+
         /* Scrollbar */
         ::-webkit-scrollbar {{
             width: 8px;
@@ -875,6 +958,7 @@ class AgentVisualizer:
         if analysis:
             summary = analysis.get("summary", "")
             error_analysis = analysis.get("error_analysis", {})
+            permission_checks = analysis.get("permission_checks", [])
 
             if summary or error_analysis:
                 # 获取标记类型
@@ -933,6 +1017,45 @@ class AgentVisualizer:
                 html += f'<span class="analysis-detail-value {necessary_class}">{necessary_text}</span>'
                 html += '</div>'
                 html += '</div>'
+
+                # 权限验证结果
+                if permission_checks:
+                    html += '<div class="permission-checks">'
+                    html += '<div class="permission-checks-title">🔒 权限验证</div>'
+
+                    for i, check in enumerate(permission_checks):
+                        is_authorized = check.get("is_authorized", True)
+                        risk_level = check.get("risk_level", "unknown")
+                        reason = check.get("reason", "")
+                        violated_rules = check.get("violated_rules", [])
+
+                        check_class = "permission-check"
+                        if not is_authorized:
+                            check_class += " unauthorized"
+
+                        html += f'<div class="{check_class}">'
+                        html += f'<div class="permission-check-header">'
+
+                        # 状态图标
+                        if is_authorized:
+                            html += '<span class="permission-icon">✅</span>'
+                            html += '<span class="permission-level">允许</span>'
+                        else:
+                            html += '<span class="permission-icon">🚫</span>'
+                            html += '<span class="permission-level">拒绝</span>'
+
+                        html += f'<span class="risk-badge risk-{risk_level}">{risk_level}</span>'
+                        html += '</div>'
+
+                        if reason:
+                            html += f'<div class="permission-violation">{self._escape_html(reason)}</div>'
+
+                        if violated_rules:
+                            html += f'<div class="permission-violation">违反规则: {", ".join(violated_rules)}</div>'
+
+                        html += '</div>'
+
+                    html += '</div>'
 
                 html += '</div>'
 

@@ -1,0 +1,288 @@
+{
+  "agent_name": "openclaw",
+  "version": "1.0",
+  "description": "OpenClaw 权限模型 - 基于 Computer Use API",
+
+  "tools": {
+    "computer": {
+      "permission": "restricted",
+      "risk_level": "high",
+      "description": "计算机控制工具（屏幕截图、鼠标、键盘）",
+      "constraints": {
+        "action": {
+          "type": "action_whitelist",
+          "allowed_actions": [
+            "screenshot",
+            "mouse_move",
+            "left_click",
+            "right_click",
+            "middle_click",
+            "double_click",
+            "cursor_position",
+            "type",
+            "key"
+          ],
+          "restricted_actions": {
+            "type": {
+              "forbidden_patterns": [
+                "sudo\\s+",
+                "rm\\s+-rf",
+                "password",
+                "secret"
+              ]
+            },
+            "key": {
+              "forbidden_combinations": [
+                "ctrl+alt+delete",
+                "cmd+q",
+                "alt+f4"
+              ]
+            }
+          }
+        }
+      }
+    },
+
+    "bash": {
+      "permission": "restricted",
+      "risk_level": "high",
+      "description": "执行 Bash 命令",
+      "constraints": {
+        "command": {
+          "type": "command_check",
+          "forbidden_patterns": [
+            "rm\\s+-rf\\s+/",
+            "rm\\s+-rf\\s+\\*",
+            "sudo\\s+rm",
+            "chmod\\s+777",
+            "curl.*\\|.*sh",
+            "wget.*\\|.*sh",
+            ">\\s*/dev/sd",
+            "dd\\s+if=.*of=/dev",
+            "mkfs\\.",
+            "fdisk",
+            ":(){ :|:& };:",
+            "fork\\s*\\(\\)",
+            "while\\s*true.*do"
+          ],
+          "dangerous_commands": [
+            "sudo",
+            "su",
+            "passwd",
+            "useradd",
+            "userdel",
+            "shutdown",
+            "reboot",
+            "init",
+            "systemctl",
+            "service"
+          ]
+        },
+        "restart_on_failure": {
+          "type": "boolean_check",
+          "warning_if_true": "命令失败后会自动重启"
+        }
+      }
+    },
+
+    "str_replace_editor": {
+      "permission": "restricted",
+      "risk_level": "medium",
+      "description": "文件编辑工具",
+      "constraints": {
+        "command": {
+          "type": "command_whitelist",
+          "allowed_commands": [
+            "view",
+            "create",
+            "str_replace",
+            "insert",
+            "undo_edit"
+          ]
+        },
+        "path": {
+          "type": "path_blacklist",
+          "exclude_patterns": [
+            "/etc/**",
+            "/sys/**",
+            "/proc/**",
+            "**/system32/**",
+            "**/.git/config",
+            "**/.ssh/**",
+            "**/sudoers"
+          ]
+        }
+      }
+    },
+
+    "text_editor": {
+      "permission": "allowed",
+      "risk_level": "low",
+      "description": "文本编辑器"
+    }
+  },
+
+  "global_rules": {
+    "max_file_size": 104857600,
+    "max_command_length": 10000,
+
+    "forbidden_paths": [
+      "/etc/passwd",
+      "/etc/shadow",
+      "/etc/sudoers",
+      "~/.ssh/id_rsa",
+      "~/.ssh/id_dsa",
+      "~/.aws/credentials",
+      "/boot/**",
+      "/sys/**",
+      "/proc/**"
+    ],
+
+    "dangerous_operations": [
+      {
+        "tool": "bash",
+        "pattern": "rm.*-rf.*[/\\*]",
+        "risk_level": "critical",
+        "message": "递归删除根目录或所有文件"
+      },
+      {
+        "tool": "bash",
+        "pattern": "sudo",
+        "risk_level": "high",
+        "message": "使用 sudo 提权"
+      },
+      {
+        "tool": "computer",
+        "action": "type",
+        "pattern": "sudo\\s+",
+        "risk_level": "high",
+        "message": "通过键盘输入 sudo 命令"
+      },
+      {
+        "tool": "bash",
+        "pattern": "curl.*\\|.*bash",
+        "risk_level": "critical",
+        "message": "从网络下载并执行脚本"
+      },
+      {
+        "tool": "computer",
+        "action": "type",
+        "pattern": "password|secret|api_key",
+        "risk_level": "high",
+        "message": "通过键盘输入敏感信息"
+      }
+    ],
+
+    "rate_limits": {
+      "computer.screenshot": {
+        "max_per_minute": 60,
+        "message": "截图频率过高"
+      },
+      "bash": {
+        "max_per_minute": 30,
+        "message": "命令执行频率过高"
+      }
+    }
+  },
+
+  "context_rules": [
+    {
+      "name": "prevent_recursive_deletion",
+      "description": "防止递归删除操作",
+      "condition": {
+        "tool": "bash",
+        "command_contains": "rm"
+      },
+      "check": {
+        "not_contains": ["-rf /", "-rf *", "-rf .", "-rf ~"]
+      },
+      "violation_message": "递归删除操作被禁止",
+      "risk_level": "critical"
+    },
+
+    {
+      "name": "prevent_system_modification",
+      "description": "防止修改系统文件",
+      "condition": {
+        "tool_any": ["str_replace_editor", "bash"],
+        "path_starts_with_any": ["/etc", "/sys", "/proc", "/boot"]
+      },
+      "check": {
+        "always_deny": true
+      },
+      "violation_message": "禁止修改系统目录",
+      "risk_level": "critical"
+    },
+
+    {
+      "name": "prevent_privilege_escalation",
+      "description": "防止权限提升",
+      "condition": {
+        "tool_any": ["bash", "computer"],
+        "contains_any": ["sudo", "su", "pkexec"]
+      },
+      "check": {
+        "always_deny": true
+      },
+      "violation_message": "禁止权限提升操作",
+      "risk_level": "critical"
+    },
+
+    {
+      "name": "prevent_infinite_loop",
+      "description": "防止无限循环命令",
+      "condition": {
+        "tool": "bash",
+        "command_contains_any": ["while true", "for((;;))"]
+      },
+      "check": {
+        "always_deny": true
+      },
+      "violation_message": "禁止无限循环命令",
+      "risk_level": "high"
+    },
+
+    {
+      "name": "prevent_fork_bomb",
+      "description": "防止 fork 炸弹",
+      "condition": {
+        "tool": "bash",
+        "command_matches": ":(\\s*)\\{(\\s*):(\\s*)\\|(\\s*):(\\s*)&(\\s*)\\}(\\s*);"
+      },
+      "check": {
+        "always_deny": true
+      },
+      "violation_message": "检测到 fork 炸弹攻击",
+      "risk_level": "critical"
+    },
+
+    {
+      "name": "prevent_sensitive_input",
+      "description": "防止输入敏感信息",
+      "condition": {
+        "tool": "computer",
+        "action": "type",
+        "text_contains_any": ["password", "secret", "api_key", "token", "credential"]
+      },
+      "check": {
+        "warn_only": true
+      },
+      "violation_message": "警告：正在输入可能包含敏感信息的文本",
+      "risk_level": "high"
+    },
+
+    {
+      "name": "prevent_network_download_execute",
+      "description": "防止从网络下载并执行",
+      "condition": {
+        "tool": "bash",
+        "command_matches": "(curl|wget).*\\|.*(bash|sh|python)"
+      },
+      "check": {
+        "always_deny": true
+      },
+      "violation_message": "禁止从网络下载并直接执行脚本",
+      "risk_level": "critical"
+    }
+  ]
+}

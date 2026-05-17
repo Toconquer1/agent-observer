@@ -29,7 +29,9 @@ pip install -e .
 
 ## 使用方法
 
-### 基本用法
+### 模式一：前台模式（运行命令）
+
+适用于 CLI 工具和短期任务。
 
 ```bash
 # 使用 agentob 命令
@@ -39,7 +41,29 @@ agentob -- <目标命令>
 python -m agentob -- <目标命令>
 ```
 
+### 模式二：Attach 模式（观测后台 agent）
+
+适用于后台服务和长期运行的 agent（如 OpenClaw）。
+
+```bash
+# 无限期捕获，直到 Ctrl+C
+agentob attach
+
+# 捕获指定时长（秒）
+agentob attach 300
+```
+
+**Attach 模式使用步骤**：
+1. 运行 `agentob attach`
+2. 按提示设置环境变量（`HTTP_PROXY` 等）
+3. 启动你的后台 agent
+4. 按 `Ctrl+C` 停止捕获并分析
+
+详细说明见 [NEW_FEATURES.md](NEW_FEATURES.md)。
+
 ### 示例
+
+#### 前台模式示例
 
 ```bash
 # 观测 Claude Code CLI
@@ -59,6 +83,21 @@ agentob -p 9090 -- python script.py
 
 # 跳过自动分析
 agentob --no-analysis -- claude
+```
+
+#### Attach 模式示例
+
+```bash
+# 终端 1：启动 agentob
+agentob attach 600  # 捕获 10 分钟
+
+# 终端 2：设置环境变量并启动 agent
+export HTTP_PROXY=http://127.0.0.1:8080
+export HTTPS_PROXY=http://127.0.0.1:8080
+export NODE_EXTRA_CA_CERTS=~/.mitmproxy/mitmproxy-ca-cert.pem
+./openclaw start
+
+# 终端 1：等待捕获完成或按 Ctrl+C
 ```
 
 ### 命令行参数
@@ -84,7 +123,7 @@ agentob --no-analysis -- claude
 
 ```
 .agentob/
-└── {session_id}/                       # 会话目录（如 a073ac04）
+└── {session_id}/                       # 会话目录（格式：YYYYMMDD_HHMM_<随机ID>）
     ├── flows.mitm                      # 原始流量文件
     └── decoded_flows/                  # 解码后的请求响应
         ├── 1_request_20260505_143022.json
@@ -94,8 +133,16 @@ agentob --no-analysis -- claude
         └── analyzed/                   # 分析结果
             ├── prompts.txt             # 提取的系统提示词
             ├── tools.json              # 提取的工具定义
-            └── call_trace.json         # 调用轨迹
+            ├── call_trace.json         # 调用轨迹
+            └── analyze.json            # LLM 分析结果（需要 API key）
 ```
+
+### 会话 ID 格式
+
+会话 ID 包含时间戳，方便按时间过滤：
+- 格式：`YYYYMMDD_HHMM_<8位随机ID>`
+- 示例：`20260517_1430_a073ac04`
+- 优势：可以快速找到特定时间的会话
 
 ### 文件说明
 

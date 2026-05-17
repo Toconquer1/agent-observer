@@ -1,0 +1,64 @@
+{
+  "agent_name": "default",
+  "version": "1.0",
+  "description": "默认权限模型 - 适用于未知 agent",
+
+  "tools": {
+    "*": {
+      "permission": "restricted",
+      "risk_level": "medium",
+      "description": "默认所有工具都需要审查"
+    }
+  },
+
+  "global_rules": {
+    "max_file_size": 10485760,
+
+    "forbidden_paths": [
+      "/etc/**",
+      "/sys/**",
+      "/proc/**",
+      "/boot/**",
+      "**/system32/**",
+      "**/.ssh/**",
+      "**/.aws/**",
+      "**/.docker/**"
+    ],
+
+    "dangerous_operations": [
+      {
+        "tool": "*",
+        "pattern": "rm.*-rf",
+        "risk_level": "critical",
+        "message": "递归删除操作"
+      },
+      {
+        "tool": "*",
+        "pattern": "sudo|su|pkexec",
+        "risk_level": "critical",
+        "message": "权限提升操作"
+      },
+      {
+        "tool": "*",
+        "pattern": "password|secret|api_key|token|credential",
+        "risk_level": "high",
+        "message": "可能包含敏感信息"
+      }
+    ]
+  },
+
+  "context_rules": [
+    {
+      "name": "default_safety_check",
+      "description": "默认安全检查",
+      "condition": {
+        "tool": "*"
+      },
+      "check": {
+        "warn_only": true
+      },
+      "violation_message": "未知工具调用，建议人工审查",
+      "risk_level": "medium"
+    }
+  ]
+}

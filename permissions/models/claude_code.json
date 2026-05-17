@@ -1,0 +1,261 @@
+{
+  "agent_name": "claude_code",
+  "version": "1.0",
+  "description": "Claude Code 权限模型 - 基于官方工具集",
+
+  "tools": {
+    "Read": {
+      "permission": "allowed",
+      "risk_level": "low",
+      "description": "读取文件内容",
+      "constraints": {
+        "file_path": {
+          "type": "path_blacklist",
+          "exclude_patterns": [
+            "**/secrets/**",
+            "**/.env",
+            "**/.env.*",
+            "**/id_rsa",
+            "**/id_dsa",
+            "**/*.key",
+            "**/*.pem",
+            "**/password*",
+            "**/credentials*"
+          ]
+        }
+      }
+    },
+
+    "Write": {
+      "permission": "restricted",
+      "risk_level": "medium",
+      "description": "写入文件内容",
+      "constraints": {
+        "file_path": {
+          "type": "path_blacklist",
+          "exclude_patterns": [
+            "/etc/**",
+            "/sys/**",
+            "/proc/**",
+            "**/system32/**",
+            "**/.git/config",
+            "**/.ssh/**"
+          ]
+        },
+        "content": {
+          "type": "content_check",
+          "forbidden_patterns": [
+            "-----BEGIN PRIVATE KEY-----",
+            "password\\s*=",
+            "api_key\\s*="
+          ]
+        }
+      }
+    },
+
+    "Edit": {
+      "permission": "allowed",
+      "risk_level": "low",
+      "description": "编辑文件内容",
+      "constraints": {
+        "file_path": {
+          "type": "path_blacklist",
+          "exclude_patterns": [
+            "/etc/**",
+            "/sys/**",
+            "**/system32/**"
+          ]
+        }
+      }
+    },
+
+    "Bash": {
+      "permission": "restricted",
+      "risk_level": "high",
+      "description": "执行 Shell 命令",
+      "constraints": {
+        "command": {
+          "type": "command_check",
+          "forbidden_patterns": [
+            "rm\\s+-rf\\s+/",
+            "rm\\s+-rf\\s+\\*",
+            "sudo\\s+rm",
+            "chmod\\s+777",
+            "curl.*\\|.*sh",
+            "wget.*\\|.*sh",
+            ">\\s*/dev/sd",
+            "dd\\s+if=.*of=/dev",
+            "mkfs\\.",
+            "fdisk",
+            ":(){ :|:& };:"
+          ],
+          "dangerous_commands": [
+            "sudo",
+            "su",
+            "passwd",
+            "useradd",
+            "userdel",
+            "shutdown",
+            "reboot",
+            "init"
+          ]
+        }
+      }
+    },
+
+    "Glob": {
+      "permission": "allowed",
+      "risk_level": "low",
+      "description": "文件模式匹配"
+    },
+
+    "Grep": {
+      "permission": "allowed",
+      "risk_level": "low",
+      "description": "内容搜索"
+    },
+
+    "Agent": {
+      "permission": "allowed",
+      "risk_level": "low",
+      "description": "启动子 Agent"
+    },
+
+    "TaskCreate": {
+      "permission": "allowed",
+      "risk_level": "low",
+      "description": "创建任务"
+    },
+
+    "TaskUpdate": {
+      "permission": "allowed",
+      "risk_level": "low",
+      "description": "更新任务"
+    },
+
+    "WebFetch": {
+      "permission": "restricted",
+      "risk_level": "medium",
+      "description": "获取网页内容",
+      "constraints": {
+        "url": {
+          "type": "url_check",
+          "forbidden_patterns": [
+            "file://",
+            "localhost",
+            "127.0.0.1",
+            "0.0.0.0",
+            "169.254.",
+            "10.",
+            "172.16.",
+            "192.168."
+          ]
+        }
+      }
+    },
+
+    "WebSearch": {
+      "permission": "allowed",
+      "risk_level": "low",
+      "description": "网页搜索"
+    }
+  },
+
+  "global_rules": {
+    "max_file_size": 104857600,
+    "forbidden_paths": [
+      "/etc/passwd",
+      "/etc/shadow",
+      "/etc/sudoers",
+      "~/.ssh/id_rsa",
+      "~/.ssh/id_dsa",
+      "~/.aws/credentials",
+      "~/.docker/config.json"
+    ],
+
+    "dangerous_operations": [
+      {
+        "tool": "Bash",
+        "pattern": "rm.*-rf.*[/\\*]",
+        "risk_level": "critical",
+        "message": "递归删除根目录或所有文件"
+      },
+      {
+        "tool": "Bash",
+        "pattern": "sudo",
+        "risk_level": "high",
+        "message": "使用 sudo 提权"
+      },
+      {
+        "tool": "Write",
+        "pattern": ".*\\.sh$",
+        "risk_level": "medium",
+        "message": "写入可执行脚本"
+      },
+      {
+        "tool": "Bash",
+        "pattern": "curl.*\\|.*bash",
+        "risk_level": "critical",
+        "message": "从网络下载并执行脚本"
+      }
+    ]
+  },
+
+  "context_rules": [
+    {
+      "name": "prevent_recursive_deletion",
+      "description": "防止递归删除操作",
+      "condition": {
+        "tool": "Bash",
+        "command_contains": "rm"
+      },
+      "check": {
+        "not_contains": ["-rf /", "-rf *", "-rf .", "-rf ~"]
+      },
+      "violation_message": "递归删除操作被禁止",
+      "risk_level": "critical"
+    },
+
+    {
+      "name": "prevent_credential_write",
+      "description": "防止写入凭证信息",
+      "condition": {
+        "tool": "Write",
+        "content_contains_any": ["password", "api_key", "secret", "token"]
+      },
+      "check": {
+        "file_path_not_in": [".env", "credentials", "secrets"]
+      },
+      "violation_message": "尝试写入可能包含凭证的文件",
+      "risk_level": "high"
+    },
+
+    {
+      "name": "prevent_system_modification",
+      "description": "防止修改系统文件",
+      "condition": {
+        "tool_any": ["Write", "Edit", "Bash"],
+        "path_starts_with_any": ["/etc", "/sys", "/proc", "/boot"]
+      },
+      "check": {
+        "always_deny": true
+      },
+      "violation_message": "禁止修改系统目录",
+      "risk_level": "critical"
+    },
+
+    {
+      "name": "prevent_privilege_escalation",
+      "description": "防止权限提升",
+      "condition": {
+        "tool": "Bash",
+        "command_contains_any": ["sudo", "su", "pkexec"]
+      },
+      "check": {
+        "always_deny": true
+      },
+      "violation_message": "禁止权限提升操作",
+      "risk_level": "critical"
+    }
+  ]
+}

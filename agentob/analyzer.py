@@ -7,6 +7,7 @@
 
 import json
 import os
+import sys
 from pathlib import Path
 from typing import Dict, List, Any, Optional
 import anthropic
@@ -18,11 +19,24 @@ load_dotenv()
 # 提示词模板目录
 PROMPTS_DIR = Path(__file__).parent / "prompts"
 
+# 添加 permissions 模块到路径
+PERMISSIONS_DIR = Path(__file__).parent.parent / "permissions"
+if str(PERMISSIONS_DIR) not in sys.path:
+    sys.path.insert(0, str(PERMISSIONS_DIR.parent))
+
+try:
+    from permissions import PermissionValidator
+    PERMISSIONS_AVAILABLE = True
+except ImportError:
+    PERMISSIONS_AVAILABLE = False
+    print("[agentob] 权限验证模块未找到，将跳过权限验证")
+
 
 class AgentAnalyzer:
     """使用 LLM 分析 agent 执行轨迹。"""
 
-    def __init__(self, analyzed_dir: str, api_key: Optional[str] = None, api_url: Optional[str] = None):
+    def __init__(self, analyzed_dir: str, api_key: Optional[str] = None, api_url: Optional[str] = None,
+                 agent_name: Optional[str] = None, workspace_path: Optional[str] = None):
         """
         初始化分析器。
 
@@ -30,6 +44,8 @@ class AgentAnalyzer:
             analyzed_dir: 包含 prompts.txt、tools.json、call_trace.json 的分析目录路径
             api_key: Anthropic API 密钥（也可从 .env 读取）
             api_url: API 基础 URL（也可从 .env 读取，默认使用 Anthropic 官方 API）
+            agent_name: Agent 名称（用于权限验证），如果不指定则自动检测
+            workspace_path: 工作空间路径（用于权限验证），如果不指定则使用 analyzed_dir 的父目录
         """
         self.analyzed_dir = Path(analyzed_dir)
         self.output_file = self.analyzed_dir / "analyze.json"
@@ -55,6 +71,12 @@ class AgentAnalyzer:
 
         # 加载提示词模板
         self.prompt_templates = self._load_prompt_templates()
+
+        # 初始化权限验证
+        self.agent_name = agent_name or "claude_code"  # 默认使用 claude_code
+        self.workspace_path = workspace_path or str(self.analyzed_dir.parent.parent)
+        self.permission_validator = None
+        self._init_permission_validator()
 
     def _load_prompts(self) -> str:
         """从 prompts.txt 加载系统提示词。"""
@@ -116,6 +138,55 @@ class AgentAnalyzer:
                 templates[key] = ""
 
         return templates
+
+    def _init_permission_validator(self):
+        """初始化权限验证器"""
+        if not PERMISSIONS_AVAILABLE:
+            print("[permissions] 权限验证模块不可用，跳过初始化")
+            return
+
+        try:
+            # 使用新的权限验证器
+            self.permission_validator = PermissionValidator(self.agent_name, self.workspace_path)
+            print(f"[permissions] 已初始化权限验证器: agent={self.agent_name}, workspace={self.workspace_path}")
+
+        except Exception as e:
+            print(f"[permissions] 初始化权限验证器失败: {e}")
+            self.permission_validator = None
+
+    def _validate_tool_calls(self, tool_calls: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """
+        验证工具调用的权限。
+
+        Args:
+            tool_calls: 工具调用列表
+
+        Returns:
+            权限验证结果列表
+        """
+        if not self.permission_validator:
+            return []
+
+        results = []
+        for tool_call in tool_calls:
+            try:
+                validation_result = self.permission_validator.validate_tool_call(tool_call)
+                results.append({
+                    "is_authorized": validation_result.is_authorized,
+                    "reason": validation_result.reason,
+                    "risk_level": validation_result.risk_level,
+                    "violated_rules": validation_result.violated_rules
+                })
+            except Exception as e:
+                print(f"[permissions] 验证工具调用失败: {e}")
+                results.append({
+                    "is_authorized": True,
+                    "reason": f"验证失败: {str(e)}",
+                    "risk_level": "unknown",
+                    "violated_rules": []
+                })
+
+        return results
 
     def _analyze_system_prompt(self) -> str:
         """分析系统提示词，理解 agent 的工作模式。"""
@@ -265,6 +336,8 @@ class AgentAnalyzer:
         )
 
         # 准备当前项内容
+        permission_check_results = []  # 存储权限验证结果
+
         if item_type == "user_message":
             raw_content = item.get("content", "")
             if isinstance(raw_content, list):
@@ -275,6 +348,9 @@ class AgentAnalyzer:
         elif item_type == "tool_calls":
             calls = item.get("calls", [])
             content = json.dumps(calls, ensure_ascii=False, indent=2)[:1000]
+
+            # 对工具调用进行权限验证
+            permission_check_results = self._validate_tool_calls(calls)
 
         elif item_type == "tool_result":
             content = str(item.get("content", ""))[:800]
@@ -348,9 +424,34 @@ class AgentAnalyzer:
                                 # 验证 error_analysis 的必需字段
                                 required_fields = ["is_correct", "is_necessary", "reasoning", "flag"]
                                 if all(field in error_analysis for field in required_fields):
-                                    # 解析成功，返回结果
+                                    # 解析成功，添加权限验证结果
                                     if attempt > 0:
                                         print(f"  ✓ 重试成功 (第 {attempt + 1} 次尝试)")
+
+                                    # 如果有权限验证结果，添加到返回值中
+                                    if permission_check_results:
+                                        result["permission_checks"] = permission_check_results
+
+                                        # 检查是否有未授权的调用
+                                        has_unauthorized = any(
+                                            not check.get("is_authorized", True)
+                                            for check in permission_check_results
+                                        )
+
+                                        if has_unauthorized:
+                                            # 如果有未授权调用，更新 flag
+                                            if result["error_analysis"]["flag"] == "ok":
+                                                result["error_analysis"]["flag"] = "error"
+
+                                            # 添加权限违规信息到 reasoning
+                                            violations = [
+                                                f"- {check.get('reason', '未授权')}"
+                                                for check in permission_check_results
+                                                if not check.get("is_authorized", True)
+                                            ]
+                                            if violations:
+                                                result["error_analysis"]["reasoning"] += "\n\n权限违规:\n" + "\n".join(violations)
+
                                     return result
                                 else:
                                     raise ValueError(f"Missing required fields in error_analysis: {required_fields}")
